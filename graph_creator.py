@@ -24,44 +24,55 @@ if __name__ == "__main__":
     keywords=[]
     G=nx.Graph()
 
-    index=1
     for file_path in file_paths:
+
         path_libraries,path_keywords=tokenize_files.get_libs_and_keywords(file_path)
-        
-        for string in path_keywords:
-            if (len(string)==2):
-                if  string[-1].isdigit():
-                    path_keywords.remove(string)
-            #if(len(string)==1):
-             #   path_keywords.remove(string)
 
-
+        index=file_paths.index(file_path)+1
         print("Path Tokenazation {0} of {1} has finished".format(str(index), str(len(file_paths))),str(index/len(file_paths)*100),"%","of 100%")
-        index=index+1
 
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
-
-        #print(library)
-        #print(keywords)
-        
+       
+       #Add libraries as nodes in the graph
         for string in  path_libraries:
             if string not in libraries:
                 G.add_node(string)
+
+        #Add keyword as nodes in the graph
         for string in path_keywords:
             if string not in keywords:
                 G.add_node(string) 
 
+        #Connect each library with all the keyowords
         for string in  path_libraries:
             for string2 in path_keywords:
-
                 G.add_edge(string,string2)
 
-    #print("Number of unique libraries:",len(libraries))
-    #print("Libraries listed alphabetically:")
-    #libraries.sort()
-    #print(libraries)
-    
+    #Matches a string with 1 to 3 numbers, zero or more "." and one or 2 letters
+    pattern=re.compile(r'[0-9]{1,3}.*?[a-z]{1,2}')
+    for string in keywords:
+        if( pattern.match(string)):
+            keywords.remove(string)
+        #if (string.isdigit()):
+            #keywords.remove(string)
+        if ( len(string)==1):
+             keywords.remove(string)
+
+    for key in keywords:
+        #Remove strings like y1, 1y etc.
+        if (len(key)==2):
+           if any(c.isdigit() for c in key):
+                keywords.remove(key)
+        #Remove string like y_1, y_b etc.
+        if (len(key)==3 and key[1]=='_'):
+            keywords.remove(key)  
+
+    print("Number of unique libraries:",len(libraries))
+    print("Libraries listed alphabetically:")
+    libraries.sort()
+    print(libraries)
+
     print("Number of unique keywords:",len(keywords))
     keywords.sort()
     print("Keywords listed alphabetically:")

@@ -1,54 +1,47 @@
 import os
 import re
 import nltk
+import spacy
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
-import spacy
 from spacy.tokens import Doc
-from cube.api import Cube
-from nltk.corpus import stopwords 
+from spacy.lang.en import English
+from spacy.lang.en.stop_words import STOP_WORDS
 
-#cube=Cube(verbose=True)
-#cube.load("en")
-
+nlp_eng = English()
 nltk.download('wordnet')
 nltk.download('averaged_perceptron_tagger')
-nltk.download('stopwords')
-nlp=spacy.load('en_core_web_sm')
-
-stop_words = set(stopwords.words('english')) 
-
-def get_wordnet_pos(word):
-    """Map POS tag to first character lemmatize() accepts"""
-    tag = nltk.pos_tag([word])[0][1][0].upper()
-    tag_dict = {"J": wordnet.ADJ,
-                "N": wordnet.NOUN,
-                "V": wordnet.VERB,
-                "R": wordnet.ADV}
-
-    return tag_dict.get(tag, wordnet.NOUN)
+nlp=spacy.load('en_core_web_sm',disable=['parser', 'ner'])
 
 def get_libs_and_keywords(path):
-
-    
+  
     file=open(path,'r')
-    #file_as_text=file.read()
-    lemmatizer = WordNetLemmatizer()
-    library=[]
+    libraries=[]
     keywords=[]
+    lib_dict={}
+
     for line in file:
+
         line_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,|\<|\>", " ", line)
         line_text = line_text.split()
+        
         if ('import' or 'from' or 'as') in line_text:
-            for string in line_text:
-                #if string.endswith('.'):              
-                    #string.replace('.', '')
-               
-                if string!='import' and string!='from' and string!='as'and (string.lower() not in library)and (len(string)>1):                   
-                    library.append(string.lower())
+            
+            #Store the values of the libraries that was imported as something else in a dictionary 
+            if 'as' in line_text:
+                lib_dict[line_text[line_text.index('as')+1].lower()]=line_text[line_text.index('import')+1]
+                #Remove string after 'as', keep only the imported library
+                line_text.pop(line_text.index('as')+1)
+
+            for string in line_text:  
+                if string!='import' and string!='from' and string!='as'and (string.lower() not in libraries):                   
+                    libraries.append(string.lower())
+
         else:
             for string in line_text:
-                
+
+                string=string.lower()
+                #Removes unwanted characters from the keyword strings
                 if string.endswith('.'):
                     string=string.translate({ord('.'): None})
                 if string.startswith('.'):
@@ -61,44 +54,26 @@ def get_libs_and_keywords(path):
                     string=string.translate({ord('`'): None})
                 if(string.startswith("`")):
                     string=string.translate({ord('`'): None})
+                if(string.endswith("!")):
+                    string=string.translate({ord('!'): None})
+
+                #Replace the libraries that was imported as a different name with the real library name
+                #(key-dot should exist in the string in order for the found key to be the actual library and not just a character in a string)
+                for key in lib_dict.keys():
+                    if (key+'.')in string :                      
+                        string=string.replace( key, lib_dict[key] )
+                    
                 #Check if the string contains characters and if it already exists(ignore case)
-                if any(c.isalpha() for c in string) and (string.lower() not in keywords) and (len(string)>1):
-                    if not(string.isdigit()):
-                        if string not in stop_words:               
-                            keywords.append(string.lower())
-
-    
-    for string in keywords:
-        #Remove strings like y1 etc.
-        if (len(string)==2):
-           if any(c.isdigit() for c in string):
-                keywords.remove(string)
-        #Remove string like y_1, y_b etc.
-        if (len(string)==3 and string[1]=='_'):
-            keywords.remove(string)
-
-
-        
-            
-
-
-   # new=[]
-   # for word in keywords:
-    #    sentences=cube(word)
-     #   for sentence in sentences:
-      #      for entry in sentence:
-       #         new.append(str(entry.lemma))
-       
-    #library = [cube(word).lemma for word in library]
-    #keywords= [ for word in keywords]
-
-    doc_library = Doc(nlp.vocab, words=library)
+                if not(string.isdigit()):
+                    if any(c.isalpha() for c in string) and (string not in keywords) and (len(string)>1):
+                            if not(nlp.vocab[string].is_stop):               
+                                keywords.append(string)
+   
+    #Spacy tokens lemmatization
     doc_keywords = Doc(nlp.vocab, words=keywords)
-    library = [word.lemma_ for word in doc_library]
     keywords= [word.lemma_ for word in doc_keywords]
 
-    return library, keywords
-
+    return libraries, keywords
 
 if __name__ == "__main__": 
 
@@ -112,8 +87,11 @@ if __name__ == "__main__":
             if '.py' in file:
                 file_paths.append(os.path.join(r, file))
 
-    library,keywords=get_libs_and_keywords(file_paths[0])
+    library,keywords=get_libs_and_keywords(file_paths[7])
+
+    library.sort()
     print(library)
+    #keywords.sort()
     print(keywords)
 
 
