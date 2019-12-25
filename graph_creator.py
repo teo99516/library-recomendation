@@ -17,25 +17,8 @@ def get_all_paths(dir_path):
     return file_paths
 
 
-def remove_unwanted_words(keywords):
-    # Matches a string with 1 to 3 numbers, zero or more "." and one or 2 letters
-    pattern = re.compile(r'[0-9]{1,3}.*?[a-z]{1,2}')
-    for keyword in keywords:
-        if pattern.match(keyword):
-            keywords.remove(keyword)
-    # Remove strings like y1, 1y etc.
-    for keyword in keywords:
-        if len(keyword) == 2:
-            if any(c.isdigit() for c in keyword):
-                keywords.remove(keyword)
+def create_graph(file_paths):
 
-    return keywords
-
-
-if __name__ == "__main__":
-
-    dir_path = os.getcwd() + '\keras\\tests'
-    file_paths = get_all_paths(dir_path)
     libraries = []
     keywords = []
     G = nx.Graph()
@@ -48,6 +31,7 @@ if __name__ == "__main__":
         print("Path Tokenizing {0} of {1} has finished".format(str(index), str(len(file_paths))),
               str(index / len(file_paths) * 100), "%", "of 100%")
 
+
         # Check if an edge exits in the graph. If so, then increase weight by one
         G.add_weighted_edges_from([(library, keyword, int(G.get_edge_data(library, keyword)['weight']) + 1)
                                    for library in path_libraries for keyword in path_keywords
@@ -59,8 +43,6 @@ if __name__ == "__main__":
 
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
-
-    keywords = remove_unwanted_words(keywords)
 
     print("Number of unique libraries: ", len(libraries))
     print("Libraries listed alphabetically:")
@@ -85,10 +67,19 @@ if __name__ == "__main__":
                     max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
 
     # Get the weights for each edge
-    labels = nx.get_edge_attributes(max_subgraph, 'weight')
+   # labels = nx.get_edge_attributes(max_subgraph, 'weight')
     # Draw the subgraph network(with large weight values) using labels for the nodes
-    nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
+   # nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
     # Draw the labels of the edges
-    edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
+   # edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
 
-    plt.show()
+   # plt.show()
+
+    return libraries, keywords, G
+
+if __name__ == "__main__":
+
+    dir_path = os.getcwd() + '\keras\\tests'
+    file_paths = get_all_paths(dir_path)
+
+    create_graph(file_paths)

@@ -11,7 +11,6 @@ nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 
 
 def get_libs_and_keywords(path):
-
     python_file = open(path, 'r')
     libraries = []
     keywords = []
@@ -54,7 +53,25 @@ def get_libs_and_keywords(path):
     # Spacy tokens lemmatization
     # doc_keywords = Doc(nlp.vocab, words=keywords)
     # keywords= [word.lemma_ for word in doc_keywords]
+    keywords = remove_unwanted_words(keywords)
+    libraries = remove_unwanted_words(libraries)
+
     return libraries, keywords
+
+
+def remove_unwanted_words(keywords):
+    # Matches a string with 1 to 3 numbers, zero or more "." and one or 2 letters
+    pattern = re.compile(r'[0-9]{1,3}.*?[a-z]{1,2}')
+    for keyword in keywords:
+        if pattern.match(keyword):
+            keywords.remove(keyword)
+    # Remove strings like y1, 1y etc.
+    for keyword in keywords:
+        if len(keyword) == 2:
+            if any(c.isdigit() for c in keyword):
+                keywords.remove(keyword)
+
+    return keywords
 
 
 # Store the values of the libraries, in a dictionary, according to the way that they were imported
