@@ -36,7 +36,9 @@ if __name__ == "__main__":
     # Create the graph of the training set
     libraries, keywords, G = graph_creator.create_graph(training_set)
     adj_matrix = nx.to_numpy_matrix(G)
+    print("\n"," Adjacency matrix")
     print(adj_matrix)
+    accuracies = []
 
     for file_path in test_set:
 
@@ -44,6 +46,7 @@ if __name__ == "__main__":
 
         # Get the path's libraries and keyword for the specific file in the path
         path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
+        print("Libraries in this file: ",len(path_libraries))
 
         # Make graph signal with value 1 if keyword exists in this graph and 0 if it doesn't
         nodes_names = list(G.nodes)
@@ -57,11 +60,18 @@ if __name__ == "__main__":
         value_list = graph_filter.tolist()
         value_list = value_list[0]
         print(' Highest 15 values of libraries predicted: ')
-        max_indices = nlargest(15, range(len(value_list)), value_list.__getitem__)
+        if len(path_libraries)<=10:
+            max_indices = nlargest(10, range(len(value_list)), value_list.__getitem__)
+        else:
+            max_indices = nlargest(30, range(len(value_list)), value_list.__getitem__)
         libraries_predicted = []
         for index in max_indices:
             print('  ', nodes_names[index])
             libraries_predicted.append(nodes_names[index])
 
         accuracy = evaluate(path_libraries, libraries_predicted)
+        accuracies.append(accuracy)
         print('\n', "Accuracy of libraries predicted: ", accuracy, '\n')
+
+    print("Average accuracy: ", sum(accuracies)/len(accuracies))
+
