@@ -17,11 +17,11 @@ def get_all_paths(dir_path):
     return file_paths
 
 
+# Create a graph from a path with multiple files
 def create_graph(file_paths):
-
     libraries = []
     keywords = []
-    G = nx.Graph()
+    lib_key_graph = nx.Graph()
 
     for file_path in file_paths:
         # Get the path's libraries and keyword for the specific file in the path
@@ -31,31 +31,42 @@ def create_graph(file_paths):
         print("Path Tokenizing {0} of {1} has finished".format(str(index), str(len(file_paths))),
               str(index / len(file_paths) * 100), "%", "of 100%")
 
-
         # Check if an edge exits in the graph. If so, then increase weight by one
-        G.add_weighted_edges_from([(library, keyword, int(G.get_edge_data(library, keyword)['weight']) + 1)
-                                   for library in path_libraries for keyword in path_keywords
-                                   if G.has_edge(library, keyword)])
+        lib_key_graph.add_weighted_edges_from(
+            [(library, keyword, int(lib_key_graph.get_edge_data(library, keyword)['weight']) + 1)
+             for library in path_libraries for keyword in path_keywords
+             if lib_key_graph.has_edge(library, keyword)])
 
         # Connect each library with all the keywords(nodes are creates automatically if they don't' exist on the graph)
-        G.add_weighted_edges_from([(library, keyword, 1) for library in path_libraries for keyword in path_keywords
-                                   if not (G.has_edge(library, keyword))])
+        lib_key_graph.add_weighted_edges_from(
+            [(library, keyword, 1) for library in path_libraries for keyword in path_keywords
+             if not (lib_key_graph.has_edge(library, keyword))])
 
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
 
     print("Number of unique libraries: ", len(libraries))
     print("Libraries listed alphabetically:")
-    libraries.sort()
+    # libraries.sort()
     print(libraries)
 
     print("Number of unique keywords: ", len(keywords))
     print("Keywords listed alphabetically:")
-    keywords.sort()
+    # keywords.sort()
     print(keywords)
 
-    print("Number of Nodes in the graph: ", len(G.nodes()))
-    print("Number of Edges in the graph: ", len(G.edges()))
+    print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
+    print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
+
+    return libraries, keywords, lib_key_graph
+
+# TEST
+# SHOULD BE DELETED
+if __name__ == "__main__":
+    dir_path = os.getcwd() + '\keras\\tests'
+    file_paths = get_all_paths(dir_path)
+
+    libraries, keywords, G = create_graph(file_paths)
 
     # Create a subgraph with only edges with large values
     max_subgraph = nx.Graph()
@@ -67,19 +78,10 @@ def create_graph(file_paths):
                     max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
 
     # Get the weights for each edge
-   # labels = nx.get_edge_attributes(max_subgraph, 'weight')
+    # labels = nx.get_edge_attributes(max_subgraph, 'weight')
     # Draw the subgraph network(with large weight values) using labels for the nodes
-   # nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
+    # nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
     # Draw the labels of the edges
-   # edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
+    # edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
 
-   # plt.show()
-
-    return libraries, keywords, G
-
-if __name__ == "__main__":
-
-    dir_path = os.getcwd() + '\keras\\tests'
-    file_paths = get_all_paths(dir_path)
-
-    create_graph(file_paths)
+    # plt.show()

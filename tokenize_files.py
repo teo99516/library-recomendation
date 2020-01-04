@@ -6,7 +6,7 @@ from spacy.tokens import Doc
 from spacy.lang.en import English
 
 nlp_eng = English()
-nltk.download('averaged_perceptron_tagger')
+# nltk.download('averaged_perceptron_tagger')
 nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 
 
@@ -28,7 +28,16 @@ def get_libs_and_keywords(path):
 
             # Get the library's full name and store it to a dictionary
             libraries_full_name, libraries_dict = parse_lines_with_libraries(splitted_code_line, libraries_dict)
-            libraries = libraries + libraries_full_name
+            # Add libraries in this file
+            # e.g. when keras.layers.Dense is imported -> keras, keras.layers, keras.layers.Dense are added
+            for full_library in libraries_full_name:
+                libraries_to_add = full_library.split('.')
+                temp_library = libraries_to_add[0]
+                libraries.append(temp_library)
+                for library in libraries_to_add[1:]:
+                    temp_library = temp_library + '.' + library
+                    libraries.append(temp_library)
+
 
         else:
             line_code_as_text = re.sub(r"\(|\)|\:|\.|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\.|\,|\<|\>|\_|\@|\!|\`",
@@ -55,7 +64,8 @@ def get_libs_and_keywords(path):
     # keywords= [word.lemma_ for word in doc_keywords]
     keywords = remove_unwanted_words(keywords)
     libraries = remove_unwanted_words(libraries)
-
+    # Get unique values
+    libraries = list(set(libraries))
     return libraries, keywords
 
 
@@ -89,7 +99,6 @@ def parse_lines_with_libraries(splitted_line, lib_dict):
                                     splitted_line[splitted_line.index('import') + 1]
             lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
             libraries_full_names.append(library_original_name)
-
         else:
             library_original_name = splitted_line[splitted_line.index('import') + 1]
             lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
@@ -122,7 +131,7 @@ if __name__ == "__main__":
             if '.py' in file:
                 file_paths.append(os.path.join(r, file))
 
-    library, keywords = get_libs_and_keywords(file_paths[8])
+    library, keywords = get_libs_and_keywords(file_paths[7])
 
     # library.sort()
     print(library)
