@@ -26,7 +26,9 @@ def create_graph(file_paths):
     for file_path in file_paths:
         # Get the path's libraries and keyword for the specific file in the path
         path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
-
+        #print("path: ", file_path)
+        #path_libraries.sort()
+        #print(path_libraries)
         index = file_paths.index(file_path) + 1
         print("Path Tokenizing {0} of {1} has finished".format(str(index), str(len(file_paths))),
               str(index / len(file_paths) * 100), "%", "of 100%")
@@ -47,7 +49,7 @@ def create_graph(file_paths):
 
     print("Number of unique libraries: ", len(libraries))
     print("Libraries listed alphabetically:")
-    # libraries.sort()
+    libraries.sort()
     print(libraries)
 
     print("Number of unique keywords: ", len(keywords))
