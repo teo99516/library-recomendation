@@ -106,11 +106,14 @@ def parse_lines_with_libraries(splitted_line, lib_dict):
     elif 'from' in splitted_line:
         # When import from a library we can import multiple libraries
         # If multiple libraries were imported, we should store them all
-        libraries_after_import = splitted_line[splitted_line.index('import') + 1:len(splitted_line)]
+        '''libraries_after_import = splitted_line[splitted_line.index('from') + 1]
         for library in libraries_after_import:
             library_original_name = splitted_line[splitted_line.index('from') + 1] + '.' + library
             libraries_full_names.append(library_original_name)
             lib_dict[library] = library_original_name
+        lib_dict[libraries_after_import]= splitted_line[splitted_line.index('from') + 1]'''
+        library_original_name = splitted_line[splitted_line.index('from') + 1]
+        libraries_full_names.append(library_original_name)
     elif 'import' in splitted_line:
         library_original_name = splitted_line[splitted_line.index('import') + 1]
         libraries_full_names.append(library_original_name)
