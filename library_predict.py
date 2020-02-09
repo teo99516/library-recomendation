@@ -2,7 +2,7 @@ import random
 import os
 import graph_creator
 import networkx as nx
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import tokenize_files
 import numpy as np
 from numpy.linalg import norm
@@ -17,7 +17,10 @@ from line_algo import line
 from argparse import Namespace
 from collections import Counter
 from sklearn.feature_selection import RFE
-
+import statistics
+from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, roc_auc_score, precision_score
+from sklearn.decomposition import PCA
+from scipy.spatial import distance
 # Calculate the hit rate of top predicted libraries
 def calculate_hit_rate(actual_libraries, top_libraries_predicted):
     predicted_count = 0
@@ -53,7 +56,7 @@ def calculate_similarity(libraries, keywords,embeddings, path_keywords, model, m
                 if keyword in keywords:
                     lib_features = embeddings[library]
                     key_features=  embeddings[keyword]
-                    function_similarity = model.predict([np.multiply(lib_features, key_features)])
+                    function_similarity = model.predict([10*lib_features + 10*key_features])
                     sim[library] = sim[library] + int(function_similarity[0])
     #print(sim)
     return sim
@@ -61,7 +64,7 @@ def calculate_similarity(libraries, keywords,embeddings, path_keywords, model, m
 
 # Predict the libraries in this file using the adjacency matrix and an graph signal
 # with 1s where keyword exists and 0 where keyword doesn't
-def predict_libraries(path_keywords, adj_matrix):
+def predict_libraries(path_keywords, adj_matrix, nodes_names):
 
     node_atr = list(repeat(0, len(adj_matrix)))
     for keyword in path_keywords:
@@ -70,19 +73,6 @@ def predict_libraries(path_keywords, adj_matrix):
     graph_filter = np.matmul(adj_matrix, np.asarray(node_atr))
     value_list = graph_filter.tolist()[0]
     return value_list
-
-
-# Get libraries with the highest values
-def highest_predicted_values(confidence, nodes_names, libraries_count):
-    print(' Highest ', libraries_count, ' values of libraries predicted: ')
-    max_indices = nlargest(libraries_count, range(len(confidence)), confidence.__getitem__)
-    highest_values_libraries = []
-    for index in max_indices:
-        print('  ', nodes_names[index], ' with confidence: ', confidence[index])
-        highest_values_libraries.append(nodes_names[index])
-    print("\n")
-    return highest_values_libraries
-
 
 if __name__ == "__main__":
 
@@ -98,8 +88,11 @@ if __name__ == "__main__":
     nx.write_gpickle(training_graph,"line_algo/data/lib_rec.gpickle")
 
     have_embeddings= True
+    random_predict=False
     if not have_embeddings:
         hit_rate=[]
+        auc=[]
+        ndcg=[]
         for file_path in test_set:
             adj_matrix = nx.to_numpy_matrix(training_graph)
             print('Predict path: ', file_path)
@@ -107,27 +100,43 @@ if __name__ == "__main__":
             # Get the path's libraries and keyword for the specific file in the path
             path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
             print("Libraries in this file: ", len(path_libraries))
-            nodes_names = list(training_graph.nodes)
+            nodes_names= list(training_graph.nodes())
+            if random_predict:
+                sim ={library:random.randint(1,1000) for library in libraries}
+                predicted_libraries = nlargest(5, sim, key=sim.get)
+            else:
+                # Predict libraries in this path
+                lib_predicted_values = predict_libraries(path_keywords, adj_matrix, nodes_names)
 
-            # Predict libraries in this path
-            lib_predicted_values = predict_libraries(path_keywords,  adj_matrix)
+                sim = {}
+                for lib_value in lib_predicted_values:
+                    if nodes_names[lib_predicted_values.index(lib_value)] in libraries:
+                        sim[nodes_names[lib_predicted_values.index(lib_value)]] = lib_value
 
-            # Compute confidence value of each library
-            confidence = [100 * lib_value / sum(lib_predicted_values) for lib_value in lib_predicted_values]
+                predicted_libraries = nlargest(20, sim, key=sim.get)
+                #predicted_libraries = highest_predicted_values(confidence, nodes_names, 5)
 
-            # Return the 5 libraries with the highest score
-            predicted_libraries = highest_predicted_values(confidence, nodes_names, 5)
-
-            # Create array with 1 for libraries predicted in this path and 0s for libraries that was not
-            labels = [1 if node in predicted_libraries else 0 for node in nodes_names]
+            # Get the largest 5 values
+            print("Libraries predicted: ", predicted_libraries)
+            print("Path libraries:", path_libraries, "\n")
 
             # Hit rate for Top-5 libraries
             hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
             hit_rate.append(hit_rate_temp)
-            print('Hit Rate @5: ', hit_rate_temp, "\n")
+            print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
 
             # Calculate AUC
-            auc = calculate_auc(np.array(labels), np.array(confidence))
+            labels = [1 if library in path_libraries else 0 for library in sim.keys()]
+            conf = list(sim.values())
+            auc.append(roc_auc_score(np.array(labels), np.array(conf)))
+
+            print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)), "\n")
+
+            # Calculate Normalized Cumulative Score
+            # Relevance score=1 if a library that was predicted is in path's libraries
+            ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
+            print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
+
     else:
         args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
                          mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
@@ -138,9 +147,8 @@ if __name__ == "__main__":
         ndcg=[]
         training_features=[]
         training_values=[]
-
         for node1, node2, weight in training_graph.edges(data=True):
-            training_features.append(np.multiply(embeddings[node1], embeddings[node2]))
+            training_features.append(np.multiply(embeddings[node1],embeddings[node2]))
             training_values.append(1)
 
         negative_values_per_node=18
@@ -150,24 +158,39 @@ if __name__ == "__main__":
             count=0
             while count<negative_values_per_node:
                 random_node=random.choice(nodes_names)
-                if not(training_graph.has_edge(node,random_node)):
-                    training_features.append(np.multiply(embeddings[node], embeddings[random_node]))
+                if not(training_graph.has_edge(node,random_node)) :
+                    training_features.append(np.multiply(embeddings[node],embeddings[random_node]))
                     training_values.append(0)
                     count=count+1
 
-        #training_features=np.matrix(training_features)[:,[1,2,3,4,5,6,7,8,11,12,14,15]]
-
-        #print(training_values)
-
-        print(Counter(training_values))
+        #print(Counter(training_values))
+        for i in range(0,len(training_features[0])):
+            print(np.std(np.matrix(training_features)[:,i]))
         #model= LinearSVC(random_state=0, tol=1e-5)
-        model=LogisticRegression(random_state=0, multi_class="ovr")
+        model=LogisticRegression(random_state=0)
         #selector= RFE(model, 12, step=1)
         #selector=selector.fit(training_features,training_values)
         #print(selector.ranking_)
-        model.fit(training_features,training_values)
-        print(model.score(training_features,training_values))
+        train_f= np.matrix(training_features)
+        model.fit(train_f,training_values)
+        print(model.score(train_f,training_values))
+        confusion = confusion_matrix(training_values, model.predict(train_f))
+        print("Confusion Matrix","\n",confusion)
+        #THRESHOLD = 0.45
+        #preds = np.where(model.predict_proba(training_features)[:, 1] > THRESHOLD, 1, 0)
+        #print(accuracy_score(training_values,preds))
+        #confusion = confusion_matrix(training_values, preds)
+        #print(confusion)
+        #pca = PCA()
+        #pca.fit_transform(training_features)
+        #pca_variance = pca.explained_variance_
 
+        #plt.figure(figsize=(8, 6))
+        #plt.bar(range(16), pca_variance, alpha=0.5, align='center', label='individual variance')
+        #plt.legend()
+        #plt.ylabel('Variance ratio')
+        #plt.xlabel('Principal components')
+        #plt.show()
 
         for file_path in test_set:
             # Get the path's libraries and keyword for the specific file in the path
@@ -176,9 +199,9 @@ if __name__ == "__main__":
             print("Number of libraries in this file: ", len(path_libraries))
 
             # Calculate similarity and save it in a dictionary
-            sim=calculate_similarity(libraries, keywords,embeddings, path_keywords, model, method='cosine')
+            sim=calculate_similarity(libraries, keywords,embeddings, path_keywords, model, method='function')
 
-            # Get the largest 20 values
+            # Get the largest 5 values
             predicted_libraries = nlargest(5, sim, key = sim.get)
             print("Libraries predicted: ",predicted_libraries)
             print("Path libraries:",path_libraries, "\n")
@@ -192,14 +215,13 @@ if __name__ == "__main__":
             labels = [1 if library in path_libraries else 0 for library in  sim.keys()]
             conf =list(sim.values())
             auc.append(roc_auc_score(np.array(labels), np.array(conf)))
+
             print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)),"\n")
 
             #Calculate Normalized Cumulative Score
             # Relevance score=1 if a library that was predicted is in path's libraries
             ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
             print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]),'\n')
-            # rel_scores=[1 if library in path_libraries else 0 for  library in sorted(sim, key=sim.get, reverse=True)]
-            # print(rel_scores)
 
     print(" \n Hit rate @",len(predicted_libraries)," \n        Average: ",sum(hit_rate)/len(hit_rate))
     print("        Range: ", min(hit_rate)," - ", max(hit_rate))
