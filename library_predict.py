@@ -21,6 +21,8 @@ import statistics
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, roc_auc_score, precision_score
 from sklearn.decomposition import PCA
 from scipy.spatial import distance
+from sklearn.preprocessing import StandardScaler
+
 # Calculate the hit rate of top predicted libraries
 def calculate_hit_rate(actual_libraries, top_libraries_predicted):
     predicted_count = 0
@@ -54,9 +56,9 @@ def calculate_similarity(libraries, keywords,embeddings, path_keywords, model, m
         for library in libraries:
             for keyword in path_keywords:
                 if keyword in keywords:
-                    lib_features = embeddings[library]
-                    key_features=  embeddings[keyword]
-                    function_similarity = model.predict([10*lib_features + 10*key_features])
+                    lib_features = scaler.transform([embeddings[library]])
+                    key_features=  scaler.transform([embeddings[keyword]])
+                    function_similarity = model.predict(np.multiply(lib_features,key_features))
                     sim[library] = sim[library] + int(function_similarity[0])
     #print(sim)
     return sim
@@ -74,6 +76,33 @@ def predict_libraries(path_keywords, adj_matrix, nodes_names):
     value_list = graph_filter.tolist()[0]
     return value_list
 
+# Create a training set for the similarity prediction model
+# Training features: products of each pair of feature's value
+# Training values:  1 when edge exists and 0 when not
+def create_training_set(training_graph, embeddings, libraries, keywords):
+
+    training_features = []
+    training_values = []
+    for node1, node2, weight in training_graph.edges(data=True):
+        training_features.append(np.multiply(embeddings[node1], embeddings[node2]))
+        training_values.append(1)
+
+    negative_values_per_node = 480
+    nodes_names = list(training_graph.nodes())
+    random.seed(20)
+    for node in nodes_names:
+        count = 0
+        if node in libraries:
+            while count < negative_values_per_node:
+                random_node = random.choice(nodes_names)
+                if random_node in keywords and not (training_graph.has_edge(node, random_node)):
+                    training_features.append(np.multiply(embeddings[node], embeddings[random_node]))
+                    training_values.append(0)
+                    count = count + 1
+    print(Counter(training_values))
+
+    return training_features, training_values
+
 if __name__ == "__main__":
 
     # Get all the paths inside the directory path provided before
@@ -83,7 +112,7 @@ if __name__ == "__main__":
     training_set, test_set = train_test_split(file_paths, test_size = 0.2, random_state = 40)
 
     # Create the graph of the training set
-    libraries, keywords, training_graph = graph_creator.create_graph(training_set)
+    libraries, keywords, training_graph = graph_creator.create_graph(file_paths)
     #Store graph in a file
     nx.write_gpickle(training_graph,"line_algo/data/lib_rec.gpickle")
 
@@ -142,48 +171,33 @@ if __name__ == "__main__":
                          mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
         # Dictionary with the embedding of every library using L.I.N.E. algorithm
         embeddings = line.main(args)
-        hit_rate=[]
-        auc=[]
-        ndcg=[]
-        training_features=[]
-        training_values=[]
-        for node1, node2, weight in training_graph.edges(data=True):
-            training_features.append(np.multiply(embeddings[node1],embeddings[node2]))
-            training_values.append(1)
 
-        negative_values_per_node=18
-        nodes_names=list(training_graph.nodes())
-        random.seed(20)
-        for node in nodes_names:
-            count=0
-            while count<negative_values_per_node:
-                random_node=random.choice(nodes_names)
-                if not(training_graph.has_edge(node,random_node)) :
-                    training_features.append(np.multiply(embeddings[node],embeddings[random_node]))
-                    training_values.append(0)
-                    count=count+1
+        #args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
+        #                 mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
+        #embeddings_second = line.main(args)
+        #embeddings={}
+        #for node in training_graph.nodes():
+        #    embeddings[node]=np.concatenate((embeddings_first[node], embeddings_second[node]), axis=None)
 
-        #print(Counter(training_values))
-        for i in range(0,len(training_features[0])):
-            print(np.std(np.matrix(training_features)[:,i]))
-        #model= LinearSVC(random_state=0, tol=1e-5)
-        model=LogisticRegression(random_state=0)
-        #selector= RFE(model, 12, step=1)
-        #selector=selector.fit(training_features,training_values)
-        #print(selector.ranking_)
-        train_f= np.matrix(training_features)
-        model.fit(train_f,training_values)
-        print(model.score(train_f,training_values))
-        confusion = confusion_matrix(training_values, model.predict(train_f))
-        print("Confusion Matrix","\n",confusion)
-        #THRESHOLD = 0.45
-        #preds = np.where(model.predict_proba(training_features)[:, 1] > THRESHOLD, 1, 0)
-        #print(accuracy_score(training_values,preds))
-        #confusion = confusion_matrix(training_values, preds)
-        #print(confusion)
-        #pca = PCA()
+        # Create training set for the model of the similarity prediction
+        training_features, training_values= create_training_set(training_graph, embeddings, libraries, keywords)
+
+        scaler = StandardScaler()
+        scaler.fit(training_features)
+        scaler.transform(training_features)
+
+        #pca = PCA(n_components=14)
         #pca.fit_transform(training_features)
         #pca_variance = pca.explained_variance_
+        #training_features = pca.transform(training_features)
+
+        #model= LinearSVC(random_state=0, tol=1e-5)
+        model=LogisticRegression(random_state=0,penalty="l2")
+        train_f= np.matrix(training_features)
+        model.fit(train_f,training_values)
+        print("Accuracy: ",model.score(train_f,training_values))
+        confusion = confusion_matrix(training_values, model.predict(train_f))
+        print("Confusion Matrix","\n",confusion)
 
         #plt.figure(figsize=(8, 6))
         #plt.bar(range(16), pca_variance, alpha=0.5, align='center', label='individual variance')
@@ -191,6 +205,11 @@ if __name__ == "__main__":
         #plt.ylabel('Variance ratio')
         #plt.xlabel('Principal components')
         #plt.show()
+
+        hit_rate = []
+        auc = []
+        ndcg = []
+
 
         for file_path in test_set:
             # Get the path's libraries and keyword for the specific file in the path
@@ -231,7 +250,4 @@ if __name__ == "__main__":
 
     print(" \n NDCG", " \n        Average: ", sum(ndcg) / len(ndcg))
     print("        Range: ", min(ndcg), " - ", max(ndcg))
-
-
-
 

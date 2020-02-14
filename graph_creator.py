@@ -26,9 +26,7 @@ def create_graph(file_paths):
     for file_path in file_paths:
         # Get the path's libraries and keyword for the specific file in the path
         path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
-        #print("path: ", file_path)
-        #path_libraries.sort()
-        #print(path_libraries)
+
         index = file_paths.index(file_path) + 1
         print("Path Tokenizing {0} of {1} has finished".format(str(index), str(len(file_paths))),
               str(index / len(file_paths) * 100), "%", "of 100%")
@@ -62,28 +60,40 @@ def create_graph(file_paths):
 
     return libraries, keywords, lib_key_graph
 
+def plot_graph(libraries, keywords, graph, total_graph=True):
+
+    max_subgraph = nx.Graph()
+    if not(total_graph):
+        # Create a subgraph with only edges with large values
+        for library in libraries:
+            for keyword in keywords:
+                if G.has_edge(library, keyword):
+                    label = G.get_edge_data(library, keyword)
+                    if int(label['weight']) > 20:
+                        max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
+    else:
+        max_subgraph=graph
+    # Get the weights for each edge
+    labels = nx.get_edge_attributes(max_subgraph, 'weight')
+    # Draw the subgraph network(with large weight values) using labels for the nodes
+    nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
+    # Draw the labels of the edges
+    edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
+
+    plt.show()
+
 # TEST
 # SHOULD BE DELETED
 if __name__ == "__main__":
-    dir_path = os.getcwd() + '\keras\\tests'
+
+    dir_path = '\keras\\tests'
     file_paths = get_all_paths(dir_path)
 
-    libraries, keywords, G = create_graph(file_paths)
+    libraries, keywords, graph= create_graph(file_paths)
 
-    # Create a subgraph with only edges with large values
-    max_subgraph = nx.Graph()
-    for library in libraries:
-        for keyword in keywords:
-            if G.has_edge(library, keyword):
-                label = G.get_edge_data(library, keyword)
-                if int(label['weight']) > 20:
-                    max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
+    plot_graph(libraries, keywords, graph, total_graph=True)
 
-    # Get the weights for each edge
-    # labels = nx.get_edge_attributes(max_subgraph, 'weight')
-    # Draw the subgraph network(with large weight values) using labels for the nodes
-    # nx.draw_networkx(max_subgraph, pos=nx.spring_layout(max_subgraph), with_labels=True)
-    # Draw the labels of the edges
-    # edge_labels = nx.draw_networkx_edge_labels(max_subgraph, pos=nx.spring_layout(max_subgraph), edge_labels=labels)
 
-    # plt.show()
+
+
+

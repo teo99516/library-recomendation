@@ -58,7 +58,6 @@ def get_libs_and_keywords(path):
                             keyword not in libraries):
                         if not nlp.vocab[keyword].is_stop:
                             keywords.append(keyword)
-
     # Spacy tokens lemmatization
     # doc_keywords = Doc(nlp.vocab, words=keywords)
     # keywords= [word.lemma_ for word in doc_keywords]

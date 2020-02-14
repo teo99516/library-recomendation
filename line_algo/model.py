@@ -6,7 +6,8 @@ class LINEModel:
         self.u_i = tf.placeholder(name='u_i', dtype=tf.int32, shape=[args.batch_size * (args.K + 1)])
         self.u_j = tf.placeholder(name='u_j', dtype=tf.int32, shape=[args.batch_size * (args.K + 1)])
         self.label = tf.placeholder(name='label', dtype=tf.float32, shape=[args.batch_size * (args.K + 1)])
-        self.embedding = tf.get_variable('target_embedding', [args.num_of_nodes, args.embedding_dim],
+        with tf.variable_scope(tf.contrib.framework.get_name_scope(), reuse=tf.AUTO_REUSE):
+            self.embedding = tf.get_variable('target_embedding', [args.num_of_nodes, args.embedding_dim],
                                          initializer=tf.random_uniform_initializer(minval=-1., maxval=1.))
         self.u_i_embedding = tf.matmul(tf.one_hot(self.u_i, depth=args.num_of_nodes), self.embedding)
         if args.proximity == 'first-order':
