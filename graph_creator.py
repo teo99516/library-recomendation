@@ -52,7 +52,7 @@ def create_graph(file_paths):
 
     print("Number of unique keywords: ", len(keywords))
     print("Keywords listed alphabetically:")
-    # keywords.sort()
+    #keywords.sort()
     print(keywords)
 
     print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
@@ -92,8 +92,5 @@ if __name__ == "__main__":
     libraries, keywords, graph= create_graph(file_paths)
 
     plot_graph(libraries, keywords, graph, total_graph=True)
-
-
-
 
 
