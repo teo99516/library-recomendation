@@ -18,7 +18,6 @@ from argparse import Namespace
 from collections import Counter
 from sklearn.feature_selection import RFE
 import statistics
-from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, roc_auc_score, precision_score
 from sklearn.decomposition import PCA
 from scipy.spatial import distance
 from sklearn.preprocessing import StandardScaler
@@ -33,16 +32,20 @@ def calculate_hit_rate(actual_libraries, top_libraries_predicted):
     return hit_rate
 
 #Calculate the similarity for each library with every keyword
-def calculate_similarity(libraries, keywords,embeddings, path_keywords, model, method="dot" ):
+def calculate_similarity(libraries, keywords,embeddings, path_keywords, model="", method="dot" ):
     # Initialize a dictionary with 0 for the cos similarity of every library
     sim = {library: 0 for library in libraries}
     if method == "cosine":
+        #idf_dict= tokenize_files.tf_idf(file_paths)
         for library in libraries:
             for keyword in path_keywords:
                 if keyword in keywords:
                     lib_array = embeddings[library]
                     keyword_array = embeddings[keyword]
                     cos_similarity = np.dot(lib_array, keyword_array) / (norm(lib_array) * norm(keyword_array))
+                    #if keyword in idf_dict.keys():
+                    #    sim[library] = sim[library] + cos_similarity*idf_dict[keyword]
+                    #else:
                     sim[library] = sim[library] + cos_similarity
     elif method=="dot":
         for library in libraries:
@@ -143,7 +146,6 @@ if __name__ == "__main__":
                         sim[nodes_names[lib_predicted_values.index(lib_value)]] = lib_value
 
                 predicted_libraries = nlargest(20, sim, key=sim.get)
-                #predicted_libraries = highest_predicted_values(confidence, nodes_names, 5)
 
             # Get the largest 5 values
             print("Libraries predicted: ", predicted_libraries)
@@ -167,49 +169,44 @@ if __name__ == "__main__":
             print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
 
     else:
-        args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
-                         mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
-        # Dictionary with the embedding of every library using L.I.N.E. algorithm
-        embeddings = line.main(args)
+        proximity_method="both"
+        if proximity_method=="both":
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
+            # Dictionary with the embedding of every library using L.I.N.E. algorithm
+            embeddings_first = line.main(args)
 
-        #args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
-        #                 mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
-        #embeddings_second = line.main(args)
-        #embeddings={}
-        #for node in training_graph.nodes():
-        #    embeddings[node]=np.concatenate((embeddings_first[node], embeddings_second[node]), axis=None)
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
+            embeddings_second = line.main(args)
+            embeddings={}
+            for node in training_graph.nodes():
+                embeddings[node]=np.concatenate((embeddings_first[node], 0.3*embeddings_second[node]), axis=None)
+        else:
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True,
+                             graph_file="line_algo/data/lib_rec.gpickle")
+            # Dictionary with the embedding of every library using L.I.N.E. algorithm
+            embeddings = line.main(args)
 
-        # Create training set for the model of the similarity prediction
-        training_features, training_values= create_training_set(training_graph, embeddings, libraries, keywords)
+        similarity_method="function"
+        if similarity_method=='function':
+            # Create training set for the model of the similarity prediction
+            training_features, training_values = create_training_set(training_graph, embeddings, libraries, keywords)
 
-        scaler = StandardScaler()
-        scaler.fit(training_features)
-        scaler.transform(training_features)
+            scaler = StandardScaler()
+            scaler.fit(training_features)
+            scaler.transform(training_features)
 
-        #pca = PCA(n_components=14)
-        #pca.fit_transform(training_features)
-        #pca_variance = pca.explained_variance_
-        #training_features = pca.transform(training_features)
-
-        #model= LinearSVC(random_state=0, tol=1e-5)
-        model=LogisticRegression(random_state=0,penalty="l2")
-        train_f= np.matrix(training_features)
-        model.fit(train_f,training_values)
-        print("Accuracy: ",model.score(train_f,training_values))
-        confusion = confusion_matrix(training_values, model.predict(train_f))
-        print("Confusion Matrix","\n",confusion)
-
-        #plt.figure(figsize=(8, 6))
-        #plt.bar(range(16), pca_variance, alpha=0.5, align='center', label='individual variance')
-        #plt.legend()
-        #plt.ylabel('Variance ratio')
-        #plt.xlabel('Principal components')
-        #plt.show()
+            #model= LinearSVC(random_state=0, tol=1e-5)
+            model=LogisticRegression(random_state=0,penalty="l2")
+            train_f= np.matrix(training_features)
+            model.fit(train_f,training_values)
+            print("Accuracy: ",model.score(train_f,training_values))
 
         hit_rate = []
         auc = []
         ndcg = []
-
 
         for file_path in test_set:
             # Get the path's libraries and keyword for the specific file in the path
@@ -218,10 +215,13 @@ if __name__ == "__main__":
             print("Number of libraries in this file: ", len(path_libraries))
 
             # Calculate similarity and save it in a dictionary
-            sim=calculate_similarity(libraries, keywords,embeddings, path_keywords, model, method='function')
+            if similarity_method=="function":
+                sim=calculate_similarity(libraries, keywords,embeddings, path_keywords,model, method=similarity_method)
+            else:
+                sim = calculate_similarity(libraries, keywords, embeddings, path_keywords, method=similarity_method)
 
             # Get the largest 5 values
-            predicted_libraries = nlargest(5, sim, key = sim.get)
+            predicted_libraries = nlargest(10, sim, key = sim.get)
             print("Libraries predicted: ",predicted_libraries)
             print("Path libraries:",path_libraries, "\n")
 
