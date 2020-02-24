@@ -1,6 +1,7 @@
 import os
 import re
 import nltk
+from sklearn.feature_extraction.text import TfidfVectorizer
 import spacy
 from spacy.tokens import Doc
 from spacy.lang.en import English
@@ -9,8 +10,25 @@ nlp_eng = English()
 # nltk.download('averaged_perceptron_tagger')
 nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 
+def tf_idf(file_paths):
+    corpus=[]
+    # Create a corpus with a string of all the keywords(combined with spaces) for each file
+    for file_name in file_paths:
+        libraries,keywords= get_libs_and_keywords(file_name,double_keywords_held=True)
+        temp_string=' '
+        for keyword in keywords:
+            temp_string = temp_string + str(keyword) + ' '
+        corpus.append(temp_string)
 
-def get_libs_and_keywords(path):
+    #print(corpus)
+    vectorizer = TfidfVectorizer(min_df=0)
+    X = vectorizer.fit_transform(corpus)
+    idf = vectorizer.idf_
+    idf_dict=dict(zip(vectorizer.get_feature_names(), idf))
+    #print("idf: ",idf_dict)
+    return idf_dict
+
+def get_libs_and_keywords(path, double_keywords_held=False):
     python_file = open(path, 'r')
     libraries = []
     keywords = []
@@ -51,16 +69,21 @@ def get_libs_and_keywords(path):
                 for key in libraries_dict.keys():
                     if key == keyword:
                         keyword = keyword.replace(key, libraries_dict[key])
+                if double_keywords_held==True:
+                    # Check if the string contains characters and if it already exists(ignore case)
+                    if not (keyword.isdigit()):
+                        if any(c.isalpha() for c in keyword) and len(keyword) > 1 and (
+                                keyword not in libraries):
+                            if not nlp.vocab[keyword].is_stop:
+                                keywords.append(keyword)
+                else:
+                    # Check if the string contains characters and if it already exists(ignore case)
+                    if not (keyword.isdigit()):
+                        if any(c.isalpha() for c in keyword) and (keyword not in keywords) and len(keyword) > 1 and (
+                                keyword not in libraries):
+                            if not nlp.vocab[keyword].is_stop:
+                                keywords.append(keyword)
 
-                # Check if the string contains characters and if it already exists(ignore case)
-                if not (keyword.isdigit()):
-                    if any(c.isalpha() for c in keyword) and (keyword not in keywords) and len(keyword) > 1 and (
-                            keyword not in libraries):
-                        if not nlp.vocab[keyword].is_stop:
-                            keywords.append(keyword)
-    # Spacy tokens lemmatization
-    # doc_keywords = Doc(nlp.vocab, words=keywords)
-    # keywords= [word.lemma_ for word in doc_keywords]
     keywords = remove_unwanted_words(keywords)
     libraries = remove_unwanted_words(libraries)
     # Get unique values
@@ -133,9 +156,11 @@ if __name__ == "__main__":
             if '.py' in file:
                 file_paths.append(os.path.join(r, file))
 
-    library, keywords = get_libs_and_keywords(file_paths[7])
+    tf_idf(file_paths)
+
+    #library, keywords = get_libs_and_keywords(file_paths[7])
 
     # library.sort()
-    print(library)
+    #print(library)
     # keywords.sort()
-    print(keywords)
+    #print(keywords)
