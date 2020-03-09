@@ -31,16 +31,8 @@ def create_graph(file_paths):
         print("Path Tokenizing {0} of {1} has finished".format(str(index), str(len(file_paths))),
               str(index / len(file_paths) * 100), "%", "of 100%")
 
-        # Check if an edge exits in the graph. If so, then increase weight by one
-        lib_key_graph.add_weighted_edges_from(
-            [(library, keyword, int(lib_key_graph.get_edge_data(library, keyword)['weight']) + 1)
-             for library in path_libraries for keyword in path_keywords
-             if lib_key_graph.has_edge(library, keyword)])
-
-        # Connect each library with all the keywords(nodes are creates automatically if they don't' exist on the graph)
-        lib_key_graph.add_weighted_edges_from(
-            [(library, keyword, 1) for library in path_libraries for keyword in path_keywords
-             if not (lib_key_graph.has_edge(library, keyword))])
+        # Upgrade the weight if an edge exists on the graph or add the edge if it does not
+        lib_key_graph=add_values_to_graph(path_libraries, path_keywords, lib_key_graph)
 
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
@@ -59,6 +51,22 @@ def create_graph(file_paths):
     print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
 
     return libraries, keywords, lib_key_graph
+
+def add_values_to_graph(path_libraries, path_keywords,lib_key_graph):
+
+    # Check if an edge exits in the graph. If so, then increase weight by one
+    lib_key_graph.add_weighted_edges_from(
+        [(library, keyword, int(lib_key_graph.get_edge_data(library, keyword)['weight']) + 1)
+         for library in path_libraries for keyword in path_keywords
+         if lib_key_graph.has_edge(library, keyword)])
+
+    # Connect each library with all the keywords(nodes are creates automatically if they don't' exist on the graph)
+    lib_key_graph.add_weighted_edges_from(
+        [(library, keyword, 1) for library in path_libraries for keyword in path_keywords
+         if not (lib_key_graph.has_edge(library, keyword))])
+
+    return lib_key_graph
+
 
 def plot_graph(libraries, keywords, graph, total_graph=True):
 

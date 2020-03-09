@@ -69,6 +69,7 @@ def get_libs_and_keywords(path, double_keywords_held=False):
                 for key in libraries_dict.keys():
                     if key == keyword:
                         keyword = keyword.replace(key, libraries_dict[key])
+                # Double keywords held for idf method
                 if double_keywords_held==True:
                     # Check if the string contains characters and if it already exists(ignore case)
                     if not (keyword.isdigit()):

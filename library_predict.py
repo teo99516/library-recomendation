@@ -21,6 +21,9 @@ import statistics
 from sklearn.decomposition import PCA
 from scipy.spatial import distance
 from sklearn.preprocessing import StandardScaler
+from node2vec import Node2Vec
+from gensim.models import Word2Vec
+from graph_line_by_line import line_by_line_graph
 
 # Calculate the hit rate of top predicted libraries
 def calculate_hit_rate(actual_libraries, top_libraries_predicted):
@@ -35,18 +38,19 @@ def calculate_hit_rate(actual_libraries, top_libraries_predicted):
 def calculate_similarity(libraries, keywords,embeddings, path_keywords, model="", method="dot" ):
     # Initialize a dictionary with 0 for the cos similarity of every library
     sim = {library: 0 for library in libraries}
+    idf_dict= tokenize_files.tf_idf(file_paths)
     if method == "cosine":
-        #idf_dict= tokenize_files.tf_idf(file_paths)
+
         for library in libraries:
             for keyword in path_keywords:
                 if keyword in keywords:
                     lib_array = embeddings[library]
                     keyword_array = embeddings[keyword]
                     cos_similarity = np.dot(lib_array, keyword_array) / (norm(lib_array) * norm(keyword_array))
-                    #if keyword in idf_dict.keys():
-                    #    sim[library] = sim[library] + cos_similarity*idf_dict[keyword]
-                    #else:
-                    sim[library] = sim[library] + cos_similarity
+                    if keyword in idf_dict.keys():
+                        sim[library] = sim[library] + cos_similarity*idf_dict[keyword]
+                    else:
+                        sim[library] = sim[library] + cos_similarity
     elif method=="dot":
         for library in libraries:
             for keyword in path_keywords:
@@ -54,7 +58,10 @@ def calculate_similarity(libraries, keywords,embeddings, path_keywords, model=""
                     lib_array = embeddings[library]
                     keyword_array = embeddings[keyword]
                     dot_similarity = np.dot(lib_array, keyword_array)
-                    sim[library] = sim[library] + dot_similarity
+                    if keyword in idf_dict.keys():
+                        sim[library] = sim[library] + dot_similarity*idf_dict[keyword]
+                    else:
+                        sim[library] = sim[library] + dot_similarity
     else:
         for library in libraries:
             for keyword in path_keywords:
@@ -62,8 +69,10 @@ def calculate_similarity(libraries, keywords,embeddings, path_keywords, model=""
                     lib_features = scaler.transform([embeddings[library]])
                     key_features=  scaler.transform([embeddings[keyword]])
                     function_similarity = model.predict(np.multiply(lib_features,key_features))
-                    sim[library] = sim[library] + int(function_similarity[0])
-    #print(sim)
+                    if keyword in idf_dict.keys():
+                        sim[library] = sim[library] + int(function_similarity[0])*idf_dict[keyword]
+                    else:
+                        sim[library] = sim[library] + int(function_similarity[0])
     return sim
 
 
@@ -82,6 +91,7 @@ def predict_libraries(path_keywords, adj_matrix, nodes_names):
 # Create a training set for the similarity prediction model
 # Training features: products of each pair of feature's value
 # Training values:  1 when edge exists and 0 when not
+# Almost equal number of positive and negative samples
 def create_training_set(training_graph, embeddings, libraries, keywords):
 
     training_features = []
@@ -106,7 +116,66 @@ def create_training_set(training_graph, embeddings, libraries, keywords):
 
     return training_features, training_values
 
+# Train a ML model that predicts if there is a an edge between two nodes
+# Return the model and the scaler that was used
+def train_relation_model(training_features, training_values):
+
+    scaler = StandardScaler()
+    scaler.fit(training_features)
+    scaler.transform(training_features)
+
+    # model= LinearSVC(random_state=0, tol=1e-5)
+    model = LogisticRegression(random_state=0, penalty="l2")
+    train_f = np.matrix(training_features)
+    model.fit(train_f, training_values)
+    print("Accuracy of Relation model: ", model.score(train_f, training_values))
+
+    return scaler, model
+
+# Return the embeddings of the graph using the L.I.N.E. or teh node
+def get_embeddings(training_graph, embedddings_method="line",proximity_method="both"):
+
+    if embedddings_method=="line":
+        if proximity_method == "both":
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True,
+                             graph_file="line_algo/data/lib_rec.gpickle")
+            # Dictionary with the embedding of every library using L.I.N.E. algorithm
+            embeddings_first = line.main(args)
+
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True,
+                             graph_file="line_algo/data/lib_rec.gpickle")
+            embeddings_second = line.main(args)
+            embeddings = {}
+            for node in training_graph.nodes():
+                embeddings[node] = np.concatenate((embeddings_first[node], 0.3 * embeddings_second[node]), axis=None)
+        else:
+            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
+                             mode="train", num_batches=1000, total_graph=True,
+                             graph_file="line_algo/data/lib_rec.gpickle")
+            # Dictionary with the embedding of every library using L.I.N.E. algorithm
+            embeddings = line.main(args)
+    elif embedddings_method=="node2vec":
+        # Precompute probabilities and generate walks - **ON WINDOWS ONLY WORKS WITH workers=1**
+        node2vec = Node2Vec(training_graph, dimensions=16, walk_length=80, num_walks=50,
+                            workers=1, temp_folder="./temp_graph",p=2, q=0.5)  # Use temp_folder for big graphs
+        # Embed nodes
+        model = node2vec.fit(window=4, min_count=1,batch_words=4)
+
+        embeddings={node:model.wv[node] for node in training_graph.nodes}
+        model.save('./embeddings.model')
+
+    return embeddings
+
 if __name__ == "__main__":
+    # Hyper parameters
+    # Graph-method: co-occur, line-by-line
+    # have_embeddings: True, False
+    # random_predict: True, False
+    graph_method = "co-occur"
+    have_embeddings = True
+    random_predict = False
 
     # Get all the paths inside the directory path provided before
     file_paths = graph_creator.get_all_paths('keras\\tests')
@@ -114,13 +183,15 @@ if __name__ == "__main__":
     # Training 80% Testing 20%
     training_set, test_set = train_test_split(file_paths, test_size = 0.2, random_state = 40)
 
-    # Create the graph of the training set
-    libraries, keywords, training_graph = graph_creator.create_graph(file_paths)
+    # Create the graph of the training set with the appropriate method
+    if graph_method=="co-occur":
+        libraries, keywords, training_graph = graph_creator.create_graph(training_set)
+    elif graph_method=="line-by-line":
+        libraries, keywords, training_graph = line_by_line_graph(training_set)
+
     #Store graph in a file
     nx.write_gpickle(training_graph,"line_algo/data/lib_rec.gpickle")
 
-    have_embeddings= True
-    random_predict=False
     if not have_embeddings:
         hit_rate=[]
         auc=[]
@@ -160,7 +231,6 @@ if __name__ == "__main__":
             labels = [1 if library in path_libraries else 0 for library in sim.keys()]
             conf = list(sim.values())
             auc.append(roc_auc_score(np.array(labels), np.array(conf)))
-
             print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)), "\n")
 
             # Calculate Normalized Cumulative Score
@@ -169,45 +239,18 @@ if __name__ == "__main__":
             print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
 
     else:
-        proximity_method="both"
-        if proximity_method=="both":
-            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
-                             mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
-            # Dictionary with the embedding of every library using L.I.N.E. algorithm
-            embeddings_first = line.main(args)
-
-            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
-                             mode="train", num_batches=1000, total_graph=True, graph_file="line_algo/data/lib_rec.gpickle")
-            embeddings_second = line.main(args)
-            embeddings={}
-            for node in training_graph.nodes():
-                embeddings[node]=np.concatenate((embeddings_first[node], 0.3*embeddings_second[node]), axis=None)
-        else:
-            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
-                             mode="train", num_batches=1000, total_graph=True,
-                             graph_file="line_algo/data/lib_rec.gpickle")
-            # Dictionary with the embedding of every library using L.I.N.E. algorithm
-            embeddings = line.main(args)
-
-        similarity_method="function"
+        embeddings_method="node2vec"
+        similarity_method = "dot"
+        embeddings=get_embeddings(training_graph, embeddings_method, proximity_method="both")
         if similarity_method=='function':
             # Create training set for the model of the similarity prediction
             training_features, training_values = create_training_set(training_graph, embeddings, libraries, keywords)
-
-            scaler = StandardScaler()
-            scaler.fit(training_features)
-            scaler.transform(training_features)
-
-            #model= LinearSVC(random_state=0, tol=1e-5)
-            model=LogisticRegression(random_state=0,penalty="l2")
-            train_f= np.matrix(training_features)
-            model.fit(train_f,training_values)
-            print("Accuracy: ",model.score(train_f,training_values))
+            # Train the relation model
+            scaler, model= train_relation_model(training_features, training_values)
 
         hit_rate = []
         auc = []
         ndcg = []
-
         for file_path in test_set:
             # Get the path's libraries and keyword for the specific file in the path
             print('Predict path: ', file_path)

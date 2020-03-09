@@ -3,5 +3,7 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/keras" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/line" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/line_algo" vcs="Git" />
   </component>
 </project>
