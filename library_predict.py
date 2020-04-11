@@ -24,7 +24,7 @@ from sklearn.preprocessing import StandardScaler
 from node2vec import Node2Vec
 from gensim.models import Word2Vec
 from graph_line_by_line import line_by_line_graph
-
+import relation_model
 
 # Calculate the hit rate of top predicted libraries
 def calculate_hit_rate(actual_libraries, top_libraries_predicted):
@@ -78,60 +78,19 @@ def calculate_similarity(libraries, keywords, embeddings, path_keywords, model="
     return sim
 
 
-# Predict the libraries in this file using the adjacency matrix and an graph signal
+# Predict the values for the libraries in this file using the adjacency matrix and an graph signal
 # with 1s where keyword exists and 0 where keyword doesn't
-def predict_libraries(path_keywords, adj_matrix, nodes_names):
+def predict_values_with_graph(path_keywords, training_graph):
+
+    adj_matrix = nx.to_numpy_matrix(training_graph)
     node_atr = list(repeat(0, len(adj_matrix)))
+    nodes_names = list(training_graph.nodes())
     for keyword in path_keywords:
         if keyword in nodes_names:
             node_atr[nodes_names.index(keyword)] = 1
     graph_filter = np.matmul(adj_matrix, np.asarray(node_atr))
     value_list = graph_filter.tolist()[0]
     return value_list
-
-
-# Create a training set for the similarity prediction model
-# Training features: products of each pair of feature's value
-# Training values:  1 when edge exists and 0 when not
-# Almost equal number of positive and negative samples
-def create_training_set(training_graph, embeddings, libraries, keywords):
-    training_features = []
-    training_values = []
-    for node1, node2, weight in training_graph.edges(data=True):
-        training_features.append(np.multiply(embeddings[node1], embeddings[node2]))
-        training_values.append(1)
-
-    negative_values_per_node = 480
-    nodes_names = list(training_graph.nodes())
-    random.seed(20)
-    for node in nodes_names:
-        count = 0
-        if node in libraries:
-            while count < negative_values_per_node:
-                random_node = random.choice(nodes_names)
-                if random_node in keywords and not (training_graph.has_edge(node, random_node)):
-                    training_features.append(np.multiply(embeddings[node], embeddings[random_node]))
-                    training_values.append(0)
-                    count = count + 1
-    print(Counter(training_values))
-
-    return training_features, training_values
-
-
-# Train a ML model that predicts if there is a an edge between two nodes
-# Return the model and the scaler that was used
-def train_relation_model(training_features, training_values):
-    scaler = StandardScaler()
-    scaler.fit(training_features)
-    scaler.transform(training_features)
-
-    # model= LinearSVC(random_state=0, tol=1e-5)
-    model = LogisticRegression(random_state=0, penalty="l2")
-    train_f = np.matrix(training_features)
-    model.fit(train_f, training_values)
-    print("Accuracy of Relation model: ", model.score(train_f, training_values))
-
-    return scaler, model
 
 
 # Return the embeddings of the graph using the L.I.N.E. or teh node
@@ -142,12 +101,12 @@ def get_embeddings(training_graph, embedddings_method="line", proximity_method="
                              mode="train", num_batches=1000, total_graph=True,
                              graph_file="line_algo/data/lib_rec.gpickle")
             # Dictionary with the embedding of every library using L.I.N.E. algorithm
-            embeddings_first = line.main(args)
+            embeddings_first = line.train(args)
 
             args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
                              mode="train", num_batches=1000, total_graph=True,
                              graph_file="line_algo/data/lib_rec.gpickle")
-            embeddings_second = line.main(args)
+            embeddings_second = line.train(args)
             embeddings = {}
             for node in training_graph.nodes():
                 embeddings[node] = np.concatenate((embeddings_first[node], 0.3 * embeddings_second[node]), axis=None)
@@ -170,6 +129,25 @@ def get_embeddings(training_graph, embedddings_method="line", proximity_method="
     return embeddings
 
 
+def predict_without_embeddings(training_graph, libraries, random_predict=False, k=5):
+
+    if random_predict:
+        sim = {library: random.randint(1, 1000) for library in libraries}
+        predicted_libraries = nlargest(k, sim, key=sim.get)
+    else:
+        # Predict libraries in this path
+        lib_predicted_values = predict_values_with_graph(path_keywords, training_graph)
+        nodes_names = list(training_graph.nodes())
+        sim = {}
+        for lib_value in lib_predicted_values:
+            if nodes_names[lib_predicted_values.index(lib_value)] in libraries:
+                sim[nodes_names[lib_predicted_values.index(lib_value)]] = lib_value
+
+        predicted_libraries = nlargest(k, sim, key=sim.get)
+
+    return predicted_libraries, sim
+
+
 if __name__ == "__main__":
     # Hyper parameters
     # Graph-method: co-occur, line-by-line
@@ -177,7 +155,7 @@ if __name__ == "__main__":
     # random_predict: True, False
     graph_method = "co-occur"
     have_embeddings = True
-    random_predict = False
+    random_predict = True
 
     # Get all the paths inside the directory path provided before
     file_paths = graph_creator.get_all_paths('keras\\tests')
@@ -199,28 +177,14 @@ if __name__ == "__main__":
         auc = []
         ndcg = []
         for file_path in test_set:
-            adj_matrix = nx.to_numpy_matrix(training_graph)
             print('Predict path: ', file_path)
 
             # Get the path's libraries and keyword for the specific file in the path
             path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
             print("Libraries in this file: ", len(path_libraries))
-            nodes_names = list(training_graph.nodes())
-            if random_predict:
-                sim = {library: random.randint(1, 1000) for library in libraries}
-                predicted_libraries = nlargest(5, sim, key=sim.get)
-            else:
-                # Predict libraries in this path
-                lib_predicted_values = predict_libraries(path_keywords, adj_matrix, nodes_names)
 
-                sim = {}
-                for lib_value in lib_predicted_values:
-                    if nodes_names[lib_predicted_values.index(lib_value)] in libraries:
-                        sim[nodes_names[lib_predicted_values.index(lib_value)]] = lib_value
-
-                predicted_libraries = nlargest(20, sim, key=sim.get)
-
-            # Get the largest 5 values
+            # Get the largest k recommended libraries
+            predicted_libraries, sim = predict_without_embeddings(training_graph, libraries, random_predict, k=10)
             print("Libraries predicted: ", predicted_libraries)
             print("Path libraries:", path_libraries, "\n")
 
@@ -242,13 +206,13 @@ if __name__ == "__main__":
 
     else:
         embeddings_method = "line"
-        similarity_method = "dot"
+        similarity_method = "function"
         embeddings = get_embeddings(training_graph, embeddings_method, proximity_method="both")
         if similarity_method == 'function':
             # Create training set for the model of the similarity prediction
-            training_features, training_values = create_training_set(training_graph, embeddings, libraries, keywords)
+            training_features, training_values = relation_model.create_training_set(training_graph, embeddings, libraries, keywords)
             # Train the relation model
-            scaler, model = train_relation_model(training_features, training_values)
+            scaler, model = relation_model.train_relation_model(training_features, training_values)
 
         hit_rate = []
         auc = []

@@ -40,14 +40,9 @@ def get_libs_and_keywords(path, double_keywords_held=False):
 
         if ('import' or 'from' or 'as') in code_line:
 
-            # Removes unwanted characters by replacing them with spaces
-            line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\<|\>|\@|\!|\`|\,",
-                                       " ", code_line)
-            # Split the text line by line
-            splitted_code_line = line_code_as_text.split()
-
             # Get the library's full name and store it to a dictionary
-            libraries_full_name, libraries_dict = parse_lines_with_libraries(splitted_code_line, libraries_dict)
+            libraries_full_name, libraries_dict = parse_lines_with_libraries(code_line, libraries_dict)
+
             # Add libraries in this file
             # e.g. when keras.layers.Dense is imported -> keras, keras.layers, keras.layers.Dense are added
             for full_library in libraries_full_name:
@@ -58,14 +53,9 @@ def get_libs_and_keywords(path, double_keywords_held=False):
                     temp_library = temp_library + '.' + library
                     libraries.append(temp_library)
 
-
         else:
-            line_code_as_text = re.sub(r"\(|\)|\:|\.|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\.|\,|\<|\>|\_|\@|\!|\`",
-                                       " ", code_line)
-            splitted_code_line = line_code_as_text.split()
-
             # Parse keywords of the line, add keywords from the line in the keywords list
-            keywords = parse_keywords(splitted_code_line, libraries_dict, libraries, keywords, nlp,
+            keywords = parse_keywords(code_line, libraries_dict, libraries, keywords, nlp,
                                       double_keywords_held=False)
     # Remove unwanted keywords
     keywords = remove_unwanted_words(keywords)
@@ -77,14 +67,19 @@ def get_libs_and_keywords(path, double_keywords_held=False):
 
 # Function for parsing a line into keywords
 # Double keywords is used only in line by line graph. 
-def parse_keywords(splitted_code_line, libraries_dict, libraries, keywords, nlp, double_keywords_held=False):
+def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, double_keywords_held=False):
+
+    line_code_as_text = re.sub(r"\(|\)|\:|\.|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\.|\,|\<|\>|\_|\@|\!|\`",
+                               " ", code_line)
+    splitted_code_line = line_code_as_text.split()
+
     for keyword in splitted_code_line:
 
         keyword = keyword.lower()
         # Replace the libraries that was imported as a different name with the real library name
-        for key in libraries_dict.keys():
-            if key == keyword:
-                keyword = keyword.replace(key, libraries_dict[key])
+        if keyword in libraries_dict.keys():
+            keyword = keyword.replace(keyword, libraries_dict[keyword])
+
         # Double keywords held for idf method
         if double_keywords_held:
             # Check if the string contains characters and if it already exists(ignore case)
@@ -124,7 +119,14 @@ def remove_unwanted_words(keywords):
 #       --> keras.backend is stored and pair value(k,keras.backend) is stored at the dict
 # e.g from keras.models import Model, Sequential
 #       --> keras.models.Model, keras.models.Sequential is stored
-def parse_lines_with_libraries(splitted_line, lib_dict):
+def parse_lines_with_libraries(code_line, lib_dict):
+
+    # Removes unwanted characters by replacing them with spaces
+    line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\<|\>|\@|\!|\`|\,",
+                               " ", code_line)
+    # Split the text line by line
+    splitted_line = line_code_as_text.split()
+
     libraries_full_names = []
     # Check what's the type of library import
     if 'as' in splitted_line:
