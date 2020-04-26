@@ -30,6 +30,42 @@ def tf_idf(file_paths):
     return idf_dict
 
 
+def get_libs_and_keywords_file(python_file, double_keywords_held=False, dot_break=True):
+    libraries = []
+    keywords = []
+    libraries_dict = {}
+    python_file = python_file.split("\n")
+    for code_line in python_file:
+        # print(code_line)
+
+        if ('import' or 'from' or 'as') in code_line:
+
+            # Get the library's full name and store it to a dictionary
+            libraries_full_name, libraries_dict = parse_lines_with_libraries(code_line, libraries_dict)
+
+            # Add libraries in this file
+            # e.g. when keras.layers.Dense is imported -> keras, keras.layers, keras.layers.Dense are added
+            for full_library in libraries_full_name:
+                libraries_to_add = full_library.split('.')
+                temp_library = libraries_to_add[0]
+                libraries.append(temp_library)
+                for library in libraries_to_add[1:]:
+                    temp_library = temp_library + '.' + library
+                    libraries.append(temp_library)
+
+        else:
+            # Parse keywords of the line, add keywords from the line in the keywords list
+            keywords = parse_keywords(code_line, libraries_dict, libraries, keywords, nlp,
+                                      double_keywords_held, dot_break)
+    # Remove unwanted keywords
+    keywords = remove_unwanted_words(keywords)
+    libraries = remove_unwanted_words(libraries)
+
+    # Get unique values
+    libraries = list(set(libraries))
+    return libraries, keywords
+
+
 def get_libs_and_keywords(path, double_keywords_held=False):
     python_file = open(path, 'r')
     libraries = []
@@ -65,12 +101,16 @@ def get_libs_and_keywords(path, double_keywords_held=False):
     libraries = list(set(libraries))
     return libraries, keywords
 
+
 # Function for parsing a line into keywords
 # Double keywords is used only in line by line graph. 
-def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, double_keywords_held=False):
-
-    line_code_as_text = re.sub(r"\(|\)|\:|\.|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\.|\,|\<|\>|\_|\@|\!|\`",
-                               " ", code_line)
+def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, double_keywords_held=False, dot_break=True):
+    if dot_break:
+        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\.|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,|\<|\>|\_|\@|\!|\`|\?|\#",
+                                   " ", code_line)
+    else:
+        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,|\<|\>|\_|\@|\!|\`|\?|\#",
+                                   " ", code_line)
     splitted_code_line = line_code_as_text.split()
 
     for keyword in splitted_code_line:
@@ -120,39 +160,53 @@ def remove_unwanted_words(keywords):
 # e.g from keras.models import Model, Sequential
 #       --> keras.models.Model, keras.models.Sequential is stored
 def parse_lines_with_libraries(code_line, lib_dict):
-
     # Removes unwanted characters by replacing them with spaces
     line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\<|\>|\@|\!|\`|\,",
                                " ", code_line)
     # Split the text line by line
     splitted_line = line_code_as_text.split()
-
     libraries_full_names = []
     # Check what's the type of library import
     if 'as' in splitted_line:
         if 'from' in splitted_line:
-            library_original_name = splitted_line[splitted_line.index('from') + 1] + '.' + \
-                                    splitted_line[splitted_line.index('import') + 1]
-            lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
-            libraries_full_names.append(library_original_name)
-        else:
-            library_original_name = splitted_line[splitted_line.index('import') + 1]
-            lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
-            libraries_full_names.append(library_original_name)
+            if 'import' in splitted_line:
+                if splitted_line.index('import') < len(splitted_line) - 1 and \
+                        splitted_line.index('from') < len(splitted_line) - 1:
+                    library_original_name = splitted_line[splitted_line.index('from') + 1] + '.' + \
+                                            splitted_line[splitted_line.index('import') + 1]
+                    lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
+                    libraries_full_names.append(library_original_name)
+        elif 'import' in splitted_line:
+            if splitted_line.index('as') < len(splitted_line) - 1 and \
+                    splitted_line.index('import') < len(splitted_line) - 1:
+                library_original_name = splitted_line[splitted_line.index('import') + 1]
+                lib_dict[splitted_line[splitted_line.index('as') + 1].lower()] = library_original_name
+                libraries_full_names.append(library_original_name)
     elif 'from' in splitted_line:
         # When import from a library we can import multiple libraries
         # If multiple libraries were imported, we should store them all
-        '''libraries_after_import = splitted_line[splitted_line.index('from') + 1]
+        '''
+        libraries_after_import = splitted_line[splitted_line.index('import') + 1:len(splitted_line)]
         for library in libraries_after_import:
             library_original_name = splitted_line[splitted_line.index('from') + 1] + '.' + library
             libraries_full_names.append(library_original_name)
             lib_dict[library] = library_original_name
-        lib_dict[libraries_after_import]= splitted_line[splitted_line.index('from') + 1]'''
-        library_original_name = splitted_line[splitted_line.index('from') + 1]
-        libraries_full_names.append(library_original_name)
+        '''
+        if splitted_line.index('from') < len(splitted_line) - 1:
+            library_original_name = splitted_line[splitted_line.index('from') + 1]
+            libraries_full_names.append(library_original_name)
     elif 'import' in splitted_line:
-        library_original_name = splitted_line[splitted_line.index('import') + 1]
-        libraries_full_names.append(library_original_name)
+        ''' 
+        # For multiple imports (e.g. import numpy, warnings)
+        libraries_after_import = splitted_line[splitted_line.index('import') + 1:len(splitted_line)]
+        for library in libraries_after_import:
+            library_original_name = splitted_line[splitted_line.index('import') + 1] + '.' + library
+            libraries_full_names.append(library_original_name)
+            lib_dict[library] = library_original_name
+        '''
+        if splitted_line.index('import') < len(splitted_line) - 1:
+            library_original_name = splitted_line[splitted_line.index('import') + 1]
+            libraries_full_names.append(library_original_name)
 
     return libraries_full_names, lib_dict
 
