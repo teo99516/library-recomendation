@@ -1,4 +1,9 @@
 from tokenize_files import get_libs_and_keywords_file
+from tokenize_files import remove_unwanted_words
+from heapq import nlargest
+import time
+from graph_creator import add_values_to_graph
+import networkx as nx
 
 
 def pretty(text):
@@ -57,58 +62,81 @@ def load(data="dataset/parallel/parallel", limit=300000):
     return iter(Loader(data, limit))
 
 
-if __name__ == "__main__":
-    '''
-    for method in methods:
-        method.body_tokens = {token: 1.0 for token in set(splitter.split(method.body, 0))}
-        for token in set(splitter.split(method.declaration)):
-            method.body_tokens[token] = 1.0
-        method.body_tokens = {token: method.body_tokens[token]/len(method.body_tokens)**0.5 for token in method.body_tokens}
-        method.quality = similarity(method.body_tokens, {token: 1.0 for token in set(splitter.split(method.description))})/len(method.body_tokens)
-        if method.domain not in domains:
-            domains[method.domain] = list()
-        domains[method.domain].append(method)
-    '''
-    number_of_methods = 100
+# Split keywords with "." into libraries bases on number of keywords after dot used
+def split_libraries(keyword, actual_libraries, num_of_keywords_after_dot=1):
+    libraries_splittted = keyword.split('.')
+    libraries_to_add = [libraries_splittted[0]]
+    previous_library = libraries_splittted[0]
+    for key in libraries_splittted[1:]:
+        libraries_to_add.append(previous_library + '.' + key)
+        previous_library = previous_library + '.' + key
+    # Stores the library and the libraries inside (e.g. os, os.paths etc.)
+    if num_of_keywords_after_dot == 1:
+        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+            actual_libraries = actual_libraries + libraries_to_add[0:2]
+    elif num_of_keywords_after_dot == 2:
+        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+            actual_libraries = actual_libraries + libraries_to_add[0:3]
+    else:
+        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+            actual_libraries = actual_libraries + libraries_to_add[0:]
+
+    return actual_libraries
+
+
+# Calculate the actual libraries and the actual keywords of the tokenized keywords
+def get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot):
+    actual_libraries = []
+    actual_keywords = []
+    for keyword in keywords_to_test:
+        # If "." exists its a library probably, if not, its a keyword
+        if "." in keyword:
+            # If first or the last character is '.', its not a library (its an object probably)
+            if not keyword.startswith('.') and not (keyword.endswith('.')):
+                actual_libraries = split_libraries(keyword, actual_libraries, num_of_keywords_after_dot)
+            else:
+                libraries_splittted = keyword.split('.')
+                for key in libraries_splittted:
+                    if key not in actual_libraries and len(key) > 1:
+                        actual_keywords.append(key)
+        else:
+            if keyword not in actual_libraries and len(keyword) > 1:
+                actual_keywords.append(keyword)
+
+    return actual_libraries, actual_keywords
+
+
+def load_dataset(number_of_methods=3000):
     methods = load(limit=number_of_methods)
+    num_of_keywords_after_dot = 1
+    counter = 1
+
     domains_keywords = {}
     domains_libraries = {}
+    domains_bodies = {}
     libraries = []
     keywords = []
-    counter = 1
     times_used = {}
+    lib_key_graph = nx.Graph()
     for method in methods:
         print(method.domain)
-        print(method.body)
+        # print(method.body)
         libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
                                                                          dot_break=False)
-        print("libraries test", libraries_to_test)
-        actual_libraries = []
-        actual_keywords = []
-        for keyword in keywords_to_test:
-            if "." in keyword:
-                # If first character is '.', its not a library (its an object probably)
-                if keyword[0] != '.':
-                    lib = keyword.split('.')
-                    # Stores the library and the library inside (e.g. os, os.paths)
-                    if len(lib[0]) > 1 and len(lib[1]) > 1:
-                        actual_libraries.append(lib[0])
-                        actual_libraries.append(lib[0]+'.'+lib[1])
-                else:
-                    lib = keyword.split('.')
-                    for key in lib:
-                        if key not in actual_libraries and len(key) > 1:
-                            actual_keywords.append(key)
-            else:
-                if keyword not in actual_libraries and len(keyword) > 1:
-                    actual_keywords.append(keyword)
+        print(libraries_to_test)
 
+        # Split keywords and libraries
+        actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot)
         actual_libraries = list(set(actual_libraries + libraries_to_test))
+        actual_keywords = remove_unwanted_words(actual_keywords)
+
+        # Add pairs of libraries and keywords into the graph of co-occurring
+        lib_key_graph = add_values_to_graph(actual_libraries, actual_keywords, lib_key_graph)
 
         # Store the number of times each library is used
         for library in actual_libraries:
             if library in times_used.keys():
-                times_used[library] = times_used[library]+1
+                times_used[library] = times_used[library] + 1
             else:
                 times_used[library] = 1
 
@@ -120,22 +148,39 @@ if __name__ == "__main__":
             domains_libraries[method.domain] = list(set(domains_libraries[method.domain] + actual_libraries))
             domains_keywords[method.domain] = list(set(domains_keywords[method.domain] + actual_keywords))
 
+        # Store libraries bodies for each project into a dictionary
+        if method.domain not in domains_bodies.keys():
+            domains_bodies[method.domain] = method.body
+        else:
+            domains_bodies[method.domain] = domains_bodies[method.domain] + method.body
+
         libraries = list(set(libraries + actual_libraries))
         keywords = list(set(keywords + actual_keywords))
         print("Progress: ", counter / number_of_methods * 100, "%")
         counter = counter + 1
 
-    keywords_print = domains_keywords["github/gstarnberger"]
+    keywords_print = domains_keywords["github/tensorflow"]
     keywords_print.sort()
-    libraries_print = domains_libraries["github/gstarnberger"]
+    libraries_print = domains_libraries["github/tensorflow"]
     libraries_print.sort()
     print("Keywords")
     print(keywords_print)
     print("Libraries")
     print(libraries_print)
+    # print(domains_bodies['github/tensorflow'])
     print("Number of times each library was used in all the projects: ")
-    print(times_used)
+    top_libraries = nlargest(20, times_used, key=times_used.get)
+    print(top_libraries)
+    print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
+    print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
     # libraries.sort()
     # print(libraries)
     # keywords.sort()
     # print(keywords)
+
+    return libraries, keywords, lib_key_graph
+
+
+if __name__ == "__main__":
+
+    libraries, keywords, lib_key_graph = load_dataset(number_of_methods=4000)
