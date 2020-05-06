@@ -106,62 +106,88 @@ def get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot):
     return actual_libraries, actual_keywords
 
 
-def load_dataset(number_of_methods=3000):
+def load_dataset(number_of_methods=10000):
     methods = load(limit=number_of_methods)
     num_of_keywords_after_dot = 1
     counter = 1
 
-    domains_keywords = {}
-    domains_libraries = {}
-    domains_bodies = {}
+    train_domains_keywords = {}
+    train_domains_bodies = {}
+    train_domains_libraries = {}
+
+    test_domains_keywords = {}
+    test_domains_libraries = {}
+
     libraries = []
     keywords = []
     times_used = {}
     lib_key_graph = nx.Graph()
     for method in methods:
-        print(method.domain)
-        # print(method.body)
-        libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
-                                                                         dot_break=False)
-        print(libraries_to_test)
+        if counter <= 0.8*number_of_methods:
+            print(method.domain)
+            # print(method.body)
+            libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
+                                                                             dot_break=False)
+            # Split keywords and libraries from dots
+            actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot)
+            actual_libraries = list(set(actual_libraries + libraries_to_test))
+            actual_keywords = remove_unwanted_words(actual_keywords)
 
-        # Split keywords and libraries
-        actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot)
-        actual_libraries = list(set(actual_libraries + libraries_to_test))
-        actual_keywords = remove_unwanted_words(actual_keywords)
+            # Add pairs of libraries and keywords into the graph of co-occurring
+            lib_key_graph = add_values_to_graph(actual_libraries, actual_keywords, lib_key_graph)
+            '''
+            # Store the number of times each library is used
+            for library in actual_libraries:
+                if library in times_used.keys():
+                    times_used[library] = times_used[library] + 1
+                else:
+                    times_used[library] = 1
 
-        # Add pairs of libraries and keywords into the graph of co-occurring
-        lib_key_graph = add_values_to_graph(actual_libraries, actual_keywords, lib_key_graph)
-
-        # Store the number of times each library is used
-        for library in actual_libraries:
-            if library in times_used.keys():
-                times_used[library] = times_used[library] + 1
+            # Store libraries and keywords for each project into a dictionary
+            if method.domain not in train_domains_libraries.keys():
+                train_domains_libraries[method.domain] = actual_libraries
+                train_domains_keywords[method.domain] = actual_keywords
             else:
-                times_used[library] = 1
+                train_domains_libraries[method.domain] = list(
+                    set(train_domains_libraries[method.domain] + actual_libraries))
+                train_domains_keywords[method.domain] = list(
+                    set(train_domains_keywords[method.domain] + actual_keywords))
 
-        # Store libraries and keywords for each project into a dictionary
-        if method.domain not in domains_libraries.keys():
-            domains_libraries[method.domain] = actual_libraries
-            domains_keywords[method.domain] = actual_keywords
+            # Store libraries bodies for each project into a dictionary
+            if method.domain not in train_domains_bodies.keys():
+                train_domains_bodies[method.domain] = method.body
+            else:
+                train_domains_bodies[method.domain] = train_domains_bodies[method.domain] + method.body
+            '''
+            libraries = libraries + actual_libraries
+            keywords = keywords + actual_keywords
+            print("Progress: ", counter /(number_of_methods*0.8) * 100, "%")
+            counter = counter + 1
         else:
-            domains_libraries[method.domain] = list(set(domains_libraries[method.domain] + actual_libraries))
-            domains_keywords[method.domain] = list(set(domains_keywords[method.domain] + actual_keywords))
+            if method.domain not in train_domains_libraries.keys():
+                print(method.domain)
+                # print(method.body)
+                libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
+                                                                                 dot_break=False)
+                # Split keywords and libraries
+                actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot)
+                actual_libraries = list(set(actual_libraries + libraries_to_test))
+                actual_keywords = remove_unwanted_words(actual_keywords)
 
-        # Store libraries bodies for each project into a dictionary
-        if method.domain not in domains_bodies.keys():
-            domains_bodies[method.domain] = method.body
-        else:
-            domains_bodies[method.domain] = domains_bodies[method.domain] + method.body
+                # Store libraries and keywords for each project into a dictionary
+                if method.domain not in test_domains_libraries.keys():
+                    test_domains_libraries[method.domain] = actual_libraries
+                    test_domains_keywords[method.domain] = actual_keywords
+                else:
+                    test_domains_libraries[method.domain] = list(
+                        set(test_domains_libraries[method.domain] + actual_libraries))
+                    test_domains_keywords[method.domain] = list(
+                        set(test_domains_keywords[method.domain] + actual_keywords))
 
-        libraries = list(set(libraries + actual_libraries))
-        keywords = list(set(keywords + actual_keywords))
-        print("Progress: ", counter / number_of_methods * 100, "%")
-        counter = counter + 1
-
-    keywords_print = domains_keywords["github/tensorflow"]
+            counter = counter + 1
+    '''keywords_print = train_domains_keywords["github/tensorflow"]
     keywords_print.sort()
-    libraries_print = domains_libraries["github/tensorflow"]
+    libraries_print = train_domains_libraries["github/tensorflow"]
     libraries_print.sort()
     print("Keywords")
     print(keywords_print)
@@ -170,17 +196,27 @@ def load_dataset(number_of_methods=3000):
     # print(domains_bodies['github/tensorflow'])
     print("Number of times each library was used in all the projects: ")
     top_libraries = nlargest(20, times_used, key=times_used.get)
-    print(top_libraries)
+    print(top_libraries)'''
     print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
     print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
-    # libraries.sort()
-    # print(libraries)
-    # keywords.sort()
-    # print(keywords)
+    libraries = list(set(libraries + actual_libraries))
+    keywords = list(set(keywords + actual_keywords))
+    print(len(libraries))
+    print(len(keywords))
 
-    return libraries, keywords, lib_key_graph
+    for library in libraries:
+        if library not in lib_key_graph.nodes():
+            libraries.remove(library)
+    for keyword in keywords:
+        if keyword not in lib_key_graph.nodes():
+            keywords.remove(keyword)
+
+    return libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords
 
 
 if __name__ == "__main__":
+    libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords \
+        = load_dataset(number_of_methods=20000)
 
-    libraries, keywords, lib_key_graph = load_dataset(number_of_methods=4000)
+    to_print = test_domains_keywords.keys()
+    print(to_print)

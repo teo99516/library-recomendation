@@ -32,7 +32,7 @@ def create_graph(file_paths):
               str(index / len(file_paths) * 100), "%", "of 100%")
 
         # Upgrade the weight if an edge exists on the graph or add the edge if it does not
-        lib_key_graph=add_values_to_graph(path_libraries, path_keywords, lib_key_graph)
+        lib_key_graph = add_values_to_graph(path_libraries, path_keywords, lib_key_graph)
 
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
@@ -44,7 +44,7 @@ def create_graph(file_paths):
 
     print("Number of unique keywords: ", len(keywords))
     print("Keywords listed alphabetically:")
-    #keywords.sort()
+    # keywords.sort()
     print(keywords)
 
     print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
@@ -52,8 +52,8 @@ def create_graph(file_paths):
 
     return libraries, keywords, lib_key_graph
 
-def add_values_to_graph(path_libraries, path_keywords,lib_key_graph):
 
+def add_values_to_graph(path_libraries, path_keywords, lib_key_graph):
     # Check if an edge exits in the graph. If so, then increase weight by one
     lib_key_graph.add_weighted_edges_from(
         [(library, keyword, int(lib_key_graph.get_edge_data(library, keyword)['weight']) + 1)
@@ -69,9 +69,8 @@ def add_values_to_graph(path_libraries, path_keywords,lib_key_graph):
 
 
 def plot_graph(libraries, keywords, graph, total_graph=True):
-
     max_subgraph = nx.Graph()
-    if not(total_graph):
+    if not (total_graph):
         # Create a subgraph with only edges with large values
         for library in libraries:
             for keyword in keywords:
@@ -80,7 +79,7 @@ def plot_graph(libraries, keywords, graph, total_graph=True):
                     if int(label['weight']) > 20:
                         max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
     else:
-        max_subgraph=graph
+        max_subgraph = graph
     # Get the weights for each edge
     labels = nx.get_edge_attributes(max_subgraph, 'weight')
     # Draw the subgraph network(with large weight values) using labels for the nodes
@@ -90,15 +89,13 @@ def plot_graph(libraries, keywords, graph, total_graph=True):
 
     plt.show()
 
+
 # TEST
 # SHOULD BE DELETED
 if __name__ == "__main__":
-
     dir_path = '\keras\\tests'
     file_paths = get_all_paths(dir_path)
 
-    libraries, keywords, graph= create_graph(file_paths)
+    libraries, keywords, graph = create_graph(file_paths)
 
     plot_graph(libraries, keywords, graph, total_graph=True)
-
-
