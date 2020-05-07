@@ -88,7 +88,7 @@ def split_libraries(keyword, actual_libraries, num_of_keywords_after_dot=1):
 
 
 # Calculate the actual libraries and the actual keywords of the tokenized keywords
-def get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot):
+def get_libraries_and_keywords(keywords_to_test, libraries,num_of_keywords_after_dot):
     actual_libraries = []
     actual_keywords = []
     for keyword in keywords_to_test:
@@ -96,14 +96,15 @@ def get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot):
         if "." in keyword:
             # If first or the last character is '.', its not a library (its an object probably)
             if not keyword.startswith('.') and not (keyword.endswith('.')):
-                actual_libraries = split_libraries(keyword, actual_libraries, num_of_keywords_after_dot)
+                if "append" not in keyword:
+                    actual_libraries = split_libraries(keyword, actual_libraries, num_of_keywords_after_dot)
             else:
                 libraries_splittted = keyword.split('.')
                 for key in libraries_splittted:
-                    if key not in actual_libraries and len(key) > 1:
+                    if key not in libraries and keyword not in actual_libraries and len(key) > 1:
                         actual_keywords.append(key)
         else:
-            if keyword not in actual_libraries and len(keyword) > 1:
+            if keyword not in libraries and keyword not in actual_libraries and len(keyword) > 1:
                 actual_keywords.append(keyword)
 
     return actual_libraries, actual_keywords
@@ -127,11 +128,11 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     for method in methods:
         if counter <= 0.8 * number_of_methods:
             print(method.domain)
-            # print(method.body)
+            #print(method.body)
             libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
                                                                              dot_break=False)
             # Split keywords and libraries from dots
-            actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, num_of_keywords_after_dot)
+            actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, libraries, num_of_keywords_after_dot)
             actual_libraries = list(set(actual_libraries + libraries_to_test))
             actual_keywords = remove_unwanted_words(actual_keywords)
             actual_libraries = remove_unwanted_words(actual_libraries)
@@ -162,6 +163,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
             else:
                 train_domains_bodies[method.domain] = train_domains_bodies[method.domain] + method.body
             '''
+            #print(actual_libraries)
+            #print(actual_keywords)
             libraries = libraries + actual_libraries
             keywords = keywords + actual_keywords
             print("Progress: ", counter / (number_of_methods * 0.8) * 100, "%")
@@ -173,7 +176,7 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                 libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
                                                                                  dot_break=False)
                 # Split keywords and libraries
-                actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test,
+                actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, libraries,
                                                                                num_of_keywords_after_dot)
                 actual_libraries = list(set(actual_libraries + libraries_to_test))
                 actual_keywords = remove_unwanted_words(actual_keywords)
@@ -221,7 +224,7 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
 
 if __name__ == "__main__":
     libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords \
-        = load_dataset(number_of_methods=10000, num_of_keywords_after_dot=0)
+        = load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1)
     keywords.sort()
     to_print = keywords
     print(to_print)
