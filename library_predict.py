@@ -27,6 +27,7 @@ from graph_line_by_line import line_by_line_graph
 import relation_model
 from load import load_dataset
 
+
 # Calculate the hit rate of top predicted libraries
 def calculate_hit_rate(actual_libraries, top_libraries_predicted):
     predicted_count = 0
@@ -38,36 +39,46 @@ def calculate_hit_rate(actual_libraries, top_libraries_predicted):
 
 
 # Calculate the similarity for each library with every keyword
-def calculate_similarity(libraries, keywords, embeddings, path_keywords, file_paths=[], model="", scaler="", method="dot"):
+def calculate_similarity(libraries, keywords, embeddings, path_keywords, file_paths=[], model="", scaler="",
+                         method="dot",
+                         idf="False"):
+    nodes = lib_key_graph.nodes()
     # Initialize a dictionary with 0 for the cos similarity of every library
     sim = {library: 0 for library in libraries}
-    # idf_dict = tokenize_files.tf_idf(file_paths)
+    if idf == "True":
+        idf_dict = tokenize_files.tf_idf(file_paths)
     if method == "cosine":
         for library in libraries:
             for keyword in path_keywords:
-                if keyword in keywords:
+                if keyword in nodes:
                     lib_array = embeddings[library]
                     keyword_array = embeddings[keyword]
                     cos_similarity = np.dot(lib_array, keyword_array) / (norm(lib_array) * norm(keyword_array))
-                    #if keyword in idf_dict.keys():
-                    #    sim[library] = sim[library] + cos_similarity * idf_dict[keyword]
-                    #else:
-                    sim[library] = sim[library] + cos_similarity
+                    if idf == "True":
+                        if keyword in idf_dict.keys():
+                            sim[library] = sim[library] + cos_similarity * idf_dict[keyword]
+                        else:
+                            sim[library] = sim[library] + cos_similarity
+                    else:
+                        sim[library] = sim[library] + cos_similarity
     elif method == "dot":
         for library in libraries:
             for keyword in path_keywords:
-                if keyword in keywords:
+                if keyword in nodes:
                     lib_array = embeddings[library]
                     keyword_array = embeddings[keyword]
                     dot_similarity = np.dot(lib_array, keyword_array)
-                    #if keyword in idf_dict.keys():
-                    #    sim[library] = sim[library] + dot_similarity * idf_dict[keyword]
-                    #else:
-                    sim[library] = sim[library] + dot_similarity
+                    if idf == "True":
+                        if keyword in idf_dict.keys():
+                            sim[library] = sim[library] + dot_similarity * idf_dict[keyword]
+                        else:
+                            sim[library] = sim[library] + dot_similarity
+                    else:
+                        sim[library] = sim[library] + dot_similarity
     else:
         for library in libraries:
             for keyword in path_keywords:
-                if keyword in keywords:
+                if keyword in nodes:
                     lib_features = scaler.transform([embeddings[library]])
                     key_features = scaler.transform([embeddings[keyword]])
                     function_similarity = model.predict(np.multiply(lib_features, key_features))
@@ -128,7 +139,7 @@ def get_embeddings(training_graph, embedddings_method="line", proximity_method="
     return embeddings
 
 
-def predict_without_embeddings(training_graph, libraries, path_keywords, random_predict=False, k=5):
+def predict_without_embeddings(training_graph, libraries, path_keywords, random_predict="False", k=5):
     if random_predict:
         sim = {library: random.randint(1, 1000) for library in libraries}
         predicted_libraries = nlargest(k, sim, key=sim.get)
@@ -146,7 +157,8 @@ def predict_without_embeddings(training_graph, libraries, path_keywords, random_
     return predicted_libraries, sim
 
 
-def test_files_with_embeddings(test_set, file_paths, libraries, keywords, similarity_method, training_graph, embeddings):
+def test_files_with_embeddings(test_set, file_paths, libraries, keywords, similarity_method, training_graph,
+                               embeddings):
     if similarity_method == 'function':
         # Create training set for the model of the similarity prediction
         training_features, training_values = relation_model.create_training_set(training_graph, embeddings,
@@ -168,10 +180,10 @@ def test_files_with_embeddings(test_set, file_paths, libraries, keywords, simila
         # Calculate similarity and save it in a dictionary
         if similarity_method == "function":
             sim = calculate_similarity(libraries, keywords, embeddings, path_keywords, file_paths, model, scaler,
-                                       method=similarity_method)
+                                       method=similarity_method, idf="True")
         else:
             sim = calculate_similarity(libraries, keywords, embeddings, path_keywords, file_paths,
-                                       method=similarity_method)
+                                       method=similarity_method, idf="True")
 
         # Get the largest 5 values
         predicted_libraries = nlargest(10, sim, key=sim.get)
@@ -265,7 +277,8 @@ def predict_libraries():
 
         # Test recommendation for python files
         predicted_libraries, auc, ndcg, hit_rate = test_files_with_embeddings(test_set, file_paths, libraries, keywords,
-                                                            similarity_method, training_graph, embeddings)
+                                                                              similarity_method, training_graph,
+                                                                              embeddings)
 
     print(" \n Hit rate @", len(predicted_libraries), " \n        Average: ", sum(hit_rate) / len(hit_rate),
           " \n        STD: ", np.std(hit_rate))
@@ -279,59 +292,95 @@ def predict_libraries():
 
 
 if __name__ == "__main__":
-    #predict_libraries()
+    # predict_libraries()
 
     libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords \
-        = load_dataset(number_of_methods=50000)
+        = load_dataset(number_of_methods=10000, num_of_keywords_after_dot=0)
 
     # Store graph in a file
     nx.write_gpickle(lib_key_graph, "line_algo/data/lib_rec.gpickle")
 
     embeddings_method = "line"
     similarity_method = "dot"
-    embeddings = get_embeddings(lib_key_graph, embeddings_method, proximity_method="both")
+    have_embeddings = "True"
+    random_predict = "False"
+
     hit_rate = []
     auc = []
     ndcg = []
-    # Store the results in a file
-    f = open("results.txt", "w")
-    for domain in test_domains_libraries.keys():
-        # Get the path's libraries and keyword for the specific file in the path
-        print('Predict path: ', domain)
-        print("Number of libraries in this file: ", len(test_domains_libraries[domain]))
 
-        path_keywords = test_domains_keywords[domain]
-        path_libraries = test_domains_libraries[domain]
+    if have_embeddings == "False":
+        for domain in test_domains_libraries.keys():
+            # Get the path's libraries and keyword for the specific file in the path
+            print('Predict path: ', domain)
+            print("Number of libraries in this file: ", len(test_domains_libraries[domain]))
 
-        # Calculate similarity and save it in a dictionary
-        if similarity_method == "function":
-            sim = calculate_similarity(libraries, keywords, embeddings, path_keywords,  model, scaler,
-                                       method=similarity_method)
-        else:
-            sim = calculate_similarity(libraries, keywords, embeddings, path_keywords,
-                                       method=similarity_method)
-        #print(sim)
-        # Get the largest 5 values
-        predicted_libraries = nlargest(10, sim, key=sim.get)
-        print("Libraries predicted: ", predicted_libraries)
-        print("Path libraries:", path_libraries, "\n")
+            path_keywords = test_domains_keywords[domain]
+            path_libraries = test_domains_libraries[domain]
 
-        # Hit rate for Top-5 libraries
-        hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
-        hit_rate.append(hit_rate_temp)
-        print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
-        f.write("Hit Rate: ")
-        f.write(str(hit_rate_temp) + "\n")
-        # Calculate AUC
-        labels = [1 if library in path_libraries else 0 for library in sim.keys()]
-        conf = list(sim.values())
-        auc_temp = roc_auc_score(np.array(labels), np.array(conf))
-        auc.append(auc_temp)
-        print("ROC AUC: ", auc_temp, "\n")
-        f.write("AUC: ")
-        f.write(str(auc_temp) + "\n")
-        # Calculate Normalized Cumulative Score
-        # Relevance score=1 if a library that was predicted is in path's libraries
-        ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
-        print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
-    f.close()
+            # Get the largest k recommended libraries
+            predicted_libraries, sim = predict_without_embeddings(lib_key_graph, libraries, path_keywords,
+                                                                  random_predict, k=10)
+            print("Libraries predicted: ", predicted_libraries)
+            path_libraries.sort()
+            print("Path libraries:", path_libraries, "\n")
+
+            # Hit rate for Top-5 libraries
+            hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
+            hit_rate.append(hit_rate_temp)
+            print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
+
+            # Calculate AUC
+            labels = [1 if library in path_libraries else 0 for library in sim.keys()]
+            conf = list(sim.values())
+            auc.append(roc_auc_score(np.array(labels), np.array(conf)))
+            print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)), "\n")
+
+            # Calculate Normalized Cumulative Score
+            # Relevance score=1 if a library that was predicted is in path's libraries
+            ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
+            print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
+    else:
+        embeddings = get_embeddings(lib_key_graph, embeddings_method, proximity_method="both")
+        # Store the results in a file
+        f = open("results.txt", "w")
+        for domain in test_domains_libraries.keys():
+            # Get the path's libraries and keyword for the specific file in the path
+            print('Predict path: ', domain)
+            print("Number of libraries in this file: ", len(test_domains_libraries[domain]))
+
+            path_keywords = test_domains_keywords[domain]
+            path_libraries = test_domains_libraries[domain]
+
+            # Calculate similarity and save it in a dictionary
+            if similarity_method == "function":
+                sim = calculate_similarity(libraries, keywords, embeddings, path_keywords, model, scaler,
+                                           method=similarity_method, idf="False")
+            else:
+                sim = calculate_similarity(libraries, keywords, embeddings, path_keywords,
+                                           method=similarity_method, idf="False")
+            # print(sim)
+            # Get the largest 5 values
+            predicted_libraries = nlargest(10, sim, key=sim.get)
+            print("Libraries predicted: ", predicted_libraries)
+            print("Path libraries:", path_libraries, "\n")
+
+            # Hit rate for Top-5 libraries
+            hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
+            hit_rate.append(hit_rate_temp)
+            print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
+            f.write("Hit Rate: ")
+            f.write(str(hit_rate_temp) + "\n")
+            # Calculate AUC
+            labels = [1 if library in path_libraries else 0 for library in sim.keys()]
+            conf = list(sim.values())
+            auc_temp = roc_auc_score(np.array(labels), np.array(conf))
+            auc.append(auc_temp)
+            print("ROC AUC: ", auc_temp, "\n")
+            f.write("AUC: ")
+            f.write(str(auc_temp) + "\n")
+            # Calculate Normalized Cumulative Score
+            # Relevance score=1 if a library that was predicted is in path's libraries
+            ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
+            print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
+        f.close()

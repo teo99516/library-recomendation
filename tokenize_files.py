@@ -106,10 +106,12 @@ def get_libs_and_keywords(path, double_keywords_held=False):
 # Double keywords is used only in line by line graph. 
 def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, double_keywords_held=False, dot_break=True):
     if dot_break:
-        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\.|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,|\<|\>|\_|\@|\!|\`|\?|\#",
+        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\.|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,"
+                                   r"|\<|\>|\_|\@|\!|\`|\?|\#|\;|\~",
                                    " ", code_line)
     else:
-        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,|\<|\>|\_|\@|\!|\`|\?|\#",
+        line_code_as_text = re.sub(r"\(|\)|\:|\[|\]|\"|\'|\||\\|\{|\}|\=|\+|\-|\*|\/"
+                                   r"|\%|\,|\<|\>|\_|\@|\!|\`|\?|\#|\;|\~",
                                    " ", code_line)
     splitted_code_line = line_code_as_text.split()
 
@@ -141,6 +143,10 @@ def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, double_k
 def remove_unwanted_words(keywords):
     # Matches a string with 1 to 3 numbers, zero or more "." and one or 2 letters
     pattern = re.compile(r'[0-9]{1,3}.*?[a-z]{1,2}')
+    for keyword in keywords:
+        if pattern.match(keyword) or keyword.isdigit() or "www" in keyword:
+            keywords.remove(keyword)
+    pattern = re.compile(r'[a-z]{1,2}[0-9]{1,3}')
     for keyword in keywords:
         if pattern.match(keyword):
             keywords.remove(keyword)
