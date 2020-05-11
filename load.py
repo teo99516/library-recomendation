@@ -4,6 +4,7 @@ from heapq import nlargest
 import time
 from graph_creator import add_values_to_graph
 import networkx as nx
+import re
 
 
 def pretty(text):
@@ -63,32 +64,35 @@ def load(data="dataset/parallel/parallel", limit=300000):
 
 
 # Split keywords with "." into libraries bases on number of keywords after dot used
-def split_libraries(keyword, actual_libraries, num_of_keywords_after_dot=1):
+def split_libraries(keyword, actual_libraries, declaration_objects, method_body, num_of_keywords_after_dot=1):
+    # if keyword+" = " not in method_body:
     libraries_splittted = keyword.split('.')
-    libraries_to_add = [libraries_splittted[0]]
-    previous_library = libraries_splittted[0]
-    for key in libraries_splittted[1:]:
-        libraries_to_add.append(previous_library + '.' + key)
-        previous_library = previous_library + '.' + key
-    # Stores the library and the libraries inside (e.g. os, os.paths etc.)
-    if num_of_keywords_after_dot == 0:
-        if len(libraries_to_add[0]) > 1:
-            actual_libraries = actual_libraries + [libraries_to_add[0]]
-    elif num_of_keywords_after_dot == 1:
-        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
-            actual_libraries = actual_libraries + libraries_to_add[0:2]
-    elif num_of_keywords_after_dot == 2:
-        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
-            actual_libraries = actual_libraries + libraries_to_add[0:3]
-    else:
-        if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
-            actual_libraries = actual_libraries + libraries_to_add[0:]
+    if libraries_splittted[0] not in declaration_objects:
+        libraries_to_add = [libraries_splittted[0]]
+        previous_library = libraries_splittted[0]
+        for key in libraries_splittted[1:]:
+            libraries_to_add.append(previous_library + '.' + key)
+            previous_library = previous_library + '.' + key
+        # Stores the library and the libraries inside (e.g. os, os.paths etc.)
+        if num_of_keywords_after_dot == 0:
+            if len(libraries_to_add[0]) > 1:
+                actual_libraries = actual_libraries + [libraries_to_add[0]]
+        elif num_of_keywords_after_dot == 1:
+            if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+                actual_libraries = actual_libraries + libraries_to_add[0:2]
+        elif num_of_keywords_after_dot == 2:
+            if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+                actual_libraries = actual_libraries + libraries_to_add[0:3]
+        else:
+            if len(libraries_to_add[0]) > 1 and len(libraries_to_add[1]) > 1:
+                actual_libraries = actual_libraries + libraries_to_add[0:]
 
     return actual_libraries
 
 
 # Calculate the actual libraries and the actual keywords of the tokenized keywords
-def get_libraries_and_keywords(keywords_to_test, libraries,num_of_keywords_after_dot):
+def get_libraries_and_keywords(keywords_to_test, libraries, declaration_objects, method_body,
+                               num_of_keywords_after_dot):
     actual_libraries = []
     actual_keywords = []
     for keyword in keywords_to_test:
@@ -96,8 +100,8 @@ def get_libraries_and_keywords(keywords_to_test, libraries,num_of_keywords_after
         if "." in keyword:
             # If first or the last character is '.', its not a library (its an object probably)
             if not keyword.startswith('.') and not (keyword.endswith('.')):
-                if "append" not in keyword:
-                    actual_libraries = split_libraries(keyword, actual_libraries, num_of_keywords_after_dot)
+                actual_libraries = split_libraries(keyword, actual_libraries, declaration_objects, method_body,
+                                                   num_of_keywords_after_dot)
             else:
                 libraries_splittted = keyword.split('.')
                 for key in libraries_splittted:
@@ -129,24 +133,35 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
         if counter <= 0.8 * number_of_methods:
             print(method.domain)
             #print(method.body)
+            # print(method.declaration)
+            # Keep the objects in the declaration to exclude them from being chosen as libraries
+            objects = re.sub(r"\(|\)|\:|\[|\]|\"|\.|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,"
+                             r"|\<|\>|\_|\@|\!|\`|\?|\#|\;|\~",
+                             " ", method.declaration)
+            declaration_objects = objects.split()
             libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
                                                                              dot_break=False)
             # Split keywords and libraries from dots
-            actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, libraries, num_of_keywords_after_dot)
+            actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, libraries,
+                                                                           declaration_objects, method.body,
+                                                                           num_of_keywords_after_dot)
             actual_libraries = list(set(actual_libraries + libraries_to_test))
+            actual_keywords = list(set(actual_keywords))
             actual_keywords = remove_unwanted_words(actual_keywords)
             actual_libraries = remove_unwanted_words(actual_libraries)
+            #print(actual_keywords)
+            #print(actual_libraries)
 
             # Add pairs of libraries and keywords into the graph of co-occurring
             lib_key_graph = add_values_to_graph(actual_libraries, actual_keywords, lib_key_graph)
-            '''
-            # Store the number of times each library is used
-            for library in actual_libraries:
-                if library in times_used.keys():
-                    times_used[library] = times_used[library] + 1
-                else:
-                    times_used[library] = 1
 
+            # Store the number of times each library is used
+            for keyword in actual_keywords:
+                if keyword in times_used.keys():
+                    times_used[keyword] = times_used[keyword] + 1
+                else:
+                    times_used[keyword] = 1
+            '''
             # Store libraries and keywords for each project into a dictionary
             if method.domain not in train_domains_libraries.keys():
                 train_domains_libraries[method.domain] = actual_libraries
@@ -163,8 +178,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
             else:
                 train_domains_bodies[method.domain] = train_domains_bodies[method.domain] + method.body
             '''
-            #print(actual_libraries)
-            #print(actual_keywords)
+            # print(actual_libraries)
+            # print(actual_keywords)
             libraries = libraries + actual_libraries
             keywords = keywords + actual_keywords
             print("Progress: ", counter / (number_of_methods * 0.8) * 100, "%")
@@ -172,11 +187,18 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
         else:
             if method.domain not in train_domains_libraries.keys():
                 print(method.domain)
-                # print(method.body)
+                #print(method.body)
+
+                objects = re.sub(r"\(|\)|\:|\[|\]|\"|\.|\'|\||\\|\{|\}|\=|\+|\-|\*|\/|\%|\,"
+                                 r"|\<|\>|\_|\@|\!|\`|\?|\#|\;|\~",
+                                 " ", method.declaration)
+                declaration_objects = objects.split()
+
                 libraries_to_test, keywords_to_test = get_libs_and_keywords_file(method.body, double_keywords_held=True,
                                                                                  dot_break=False)
                 # Split keywords and libraries
                 actual_libraries, actual_keywords = get_libraries_and_keywords(keywords_to_test, libraries,
+                                                                               declaration_objects, method.body,
                                                                                num_of_keywords_after_dot)
                 actual_libraries = list(set(actual_libraries + libraries_to_test))
                 actual_keywords = remove_unwanted_words(actual_keywords)
@@ -192,6 +214,10 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                     test_domains_keywords[method.domain] = list(
                         set(test_domains_keywords[method.domain] + actual_keywords))
 
+                # Store libraries and keywords for each project into a dictionary
+                # test_domains_libraries[method.name] = actual_libraries
+                # test_domains_keywords[method.name] = actual_keywords
+
             counter = counter + 1
     '''keywords_print = train_domains_keywords["github/tensorflow"]
     keywords_print.sort()
@@ -205,19 +231,23 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     print("Number of times each library was used in all the projects: ")
     top_libraries = nlargest(20, times_used, key=times_used.get)
     print(top_libraries)'''
-    print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
-    print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
-    libraries = list(set(libraries + actual_libraries))
-    keywords = list(set(keywords + actual_keywords))
-    print(len(libraries))
-    print(len(keywords))
+    libraries = list(set(libraries))
+    keywords = list(set(keywords))
 
-    for library in libraries:
-        if library not in lib_key_graph.nodes():
-            libraries.remove(library)
     for keyword in keywords:
         if keyword not in lib_key_graph.nodes():
             keywords.remove(keyword)
+        elif times_used[keyword] <= 1:
+            keywords.remove(keyword)
+            lib_key_graph.remove_node(keyword)
+    isolates_nodes = list(nx.isolates(lib_key_graph))
+    #print(isolates_nodes)
+    lib_key_graph.remove_nodes_from(isolates_nodes)
+
+    print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
+    print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
+    print(len(libraries))
+    print(len(keywords))
 
     return libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords
 
@@ -225,9 +255,10 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
 if __name__ == "__main__":
     libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords \
         = load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1)
-    keywords.sort()
-    to_print = keywords
-    print(to_print)
+    # keywords.sort()
+    # to_print = keywords
+    # print(to_print)
+    '''
     max_subgraph = nx.Graph()
     for library in libraries:
         for keyword in keywords:
@@ -236,4 +267,4 @@ if __name__ == "__main__":
                 if int(label['weight']) > 20:
                     max_subgraph.add_edge(library, keyword, weight=int(label['weight']))
 
-    print(max_subgraph.edges.data('weight', default=1))
+    print(max_subgraph.edges.data('weight', default=1))'''
