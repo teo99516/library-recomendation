@@ -128,6 +128,7 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     libraries = []
     keywords = []
     times_used = {}
+    times_used_libs = {}
     lib_key_graph = nx.Graph()
     for method in methods:
         if counter <= 0.8 * number_of_methods:
@@ -161,6 +162,13 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                     times_used[keyword] = times_used[keyword] + 1
                 else:
                     times_used[keyword] = 1
+            # Store the number of times each library is used
+            for library in actual_libraries:
+                if library in times_used_libs.keys():
+                    times_used_libs[library] = times_used_libs[library] + 1
+                else:
+                    times_used_libs[library] = 1
+
             '''
             # Store libraries and keywords for each project into a dictionary
             if method.domain not in train_domains_libraries.keys():
@@ -237,9 +245,15 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     for keyword in keywords:
         if keyword not in lib_key_graph.nodes():
             keywords.remove(keyword)
-        elif times_used[keyword] <= 1:
+        elif int(times_used[keyword]) <= 6000:
             keywords.remove(keyword)
             lib_key_graph.remove_node(keyword)
+    for library in libraries:
+        if library not in lib_key_graph.nodes():
+            libraries.remove(library)
+        elif int(times_used_libs[library]) <= 1000:
+            libraries.remove(library)
+            lib_key_graph.remove_node(library)
     isolates_nodes = list(nx.isolates(lib_key_graph))
     #print(isolates_nodes)
     lib_key_graph.remove_nodes_from(isolates_nodes)
@@ -249,12 +263,16 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     print(len(libraries))
     print(len(keywords))
 
+    to_print = list(times_used_libs.values())
+    to_print.sort()
+    print(to_print)
+
     return libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords
 
 
 if __name__ == "__main__":
     libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords \
-        = load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1)
+        = load_dataset(number_of_methods=20000, num_of_keywords_after_dot=0)
     # keywords.sort()
     # to_print = keywords
     # print(to_print)

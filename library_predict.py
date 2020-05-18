@@ -334,9 +334,10 @@ if __name__ == "__main__":
 
                 # Calculate AUC
                 labels = [1 if library in path_libraries else 0 for library in sim.keys()]
-                conf = list(sim.values())
-                auc.append(roc_auc_score(np.array(labels), np.array(conf)))
-                print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)), "\n")
+                if 1 in labels:
+                    conf = list(sim.values())
+                    auc.append(roc_auc_score(np.array(labels), np.array(conf)))
+                    print("ROC AUC: ", roc_auc_score(np.array(labels), np.array(conf)), "\n")
 
                 # Calculate Normalized Cumulative Score
                 # Relevance score=1 if a library that was predicted is in path's libraries
