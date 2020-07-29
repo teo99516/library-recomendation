@@ -23,6 +23,8 @@ def create_graph(file_paths):
     keywords = []
     lib_key_graph = nx.Graph()
 
+    train_domains_libraries = {}
+    train_domains_keywords = {}
     for file_path in file_paths:
         # Get the path's libraries and keyword for the specific file in the path
         path_libraries, path_keywords = tokenize_files.get_libs_and_keywords(file_path)
@@ -34,6 +36,9 @@ def create_graph(file_paths):
         # Upgrade the weight if an edge exists on the graph or add the edge if it does not
         lib_key_graph = add_values_to_graph(path_libraries, path_keywords, lib_key_graph)
 
+        train_domains_libraries[file_path] = path_libraries
+        train_domains_keywords[file_path] = path_keywords
+
         libraries = list(set(libraries + path_libraries))
         keywords = list(set(keywords + path_keywords))
 
@@ -44,13 +49,13 @@ def create_graph(file_paths):
 
     print("Number of unique keywords: ", len(keywords))
     print("Keywords listed alphabetically:")
-    # keywords.sort()
+    keywords.sort()
     print(keywords)
 
     print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
     print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
 
-    return libraries, keywords, lib_key_graph
+    return libraries, keywords, lib_key_graph, train_domains_libraries, train_domains_keywords
 
 
 def add_values_to_graph(path_libraries, path_keywords, lib_key_graph):
@@ -89,13 +94,3 @@ def plot_graph(libraries, keywords, graph, total_graph=True):
 
     plt.show()
 
-
-# TEST
-# SHOULD BE DELETED
-if __name__ == "__main__":
-    dir_path = '\keras\\tests'
-    file_paths = get_all_paths(dir_path)
-
-    libraries, keywords, graph = create_graph(file_paths)
-
-    plot_graph(libraries, keywords, graph, total_graph=True)
