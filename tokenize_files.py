@@ -6,6 +6,7 @@ import spacy
 from spacy.tokens import Doc
 from spacy.lang.en import English
 from nltk.stem import PorterStemmer
+from math import log
 
 nlp_eng = English()
 # nltk.download('averaged_perceptron_tagger')
@@ -13,19 +14,13 @@ nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 
 
 def tf_idf(train_keywords):
-    corpus = []
-    for repo in train_keywords.keys():
-        temp_string = ' '
-        for keyword in train_keywords[repo]:
-            temp_string = temp_string + str(keyword) + ' '
-        corpus.append(temp_string)
+    df ={}
+    for keywords in train_keywords.values():
+        for keyword in keywords:
+            df[keyword] = df.get(keyword, 0) + 1
+    log2= log(2)
 
-    vectorizer = TfidfVectorizer(min_df=0)
-    X = vectorizer.fit_transform(corpus)
-    idf = vectorizer.idf_
-    idf_dict = dict(zip(vectorizer.get_feature_names(), idf))
-    # print("idf: ",idf_dict)
-    return idf_dict
+    return {key:log2/log(df[key]+1) for key in df}
 
 
 def tf_idf_files(file_paths):
@@ -46,7 +41,7 @@ def tf_idf_files(file_paths):
     return idf_dict
 
 
-def get_libs_and_keywords_file(python_file, double_keywords_held=False, dot_break=True, stem_use = "True"):
+def get_libs_and_keywords_file(python_file, double_keywords_held=False, dot_break=True, stem_use = "True", return_libraries='True'):
     libraries = []
     keywords = []
     libraries_dict = {}
@@ -56,7 +51,7 @@ def get_libs_and_keywords_file(python_file, double_keywords_held=False, dot_brea
     for code_line in python_file:
         # print(code_line)
 
-        if ('import' or 'from' or 'as') in code_line:
+        if ('import' or 'from' or 'as') in code_line and return_libraries == 'True':
 
             # Get the library's full name and store it to a dictionary
             libraries_full_name, libraries_dict = parse_lines_with_libraries(code_line, libraries_dict)
@@ -137,6 +132,8 @@ def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, ps, stem
 
         keyword = keyword.lower()
         if stem_use == "True":
+            if keyword.endswith('.'):
+                keyword = keyword[:-1]
             keyword = ps.stem(keyword)
         # Replace the libraries that was imported as a different name with the real library name
         if keyword in libraries_dict.keys():
@@ -157,6 +154,13 @@ def parse_keywords(code_line, libraries_dict, libraries, keywords, nlp, ps, stem
                         keyword not in libraries):
                     if not nlp.vocab[keyword].is_stop:
                         keywords.append(keyword)
+    #last_keyword = None
+    #for keyword in list(keywords):
+    #    if last_keyword is not None:
+    #        keywords.append(last_keyword+ ' ' +keyword)
+    #    last_keyword = keyword
+
+
     return keywords
 
 

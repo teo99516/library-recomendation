@@ -13,8 +13,9 @@ class LINEModel:
         if args.proximity == 'first-order':
             self.u_j_embedding = tf.matmul(tf.one_hot(self.u_j, depth=args.num_of_nodes), self.embedding)
         elif args.proximity == 'second-order':
-            self.context_embedding = tf.get_variable('context_embedding', [args.num_of_nodes, args.embedding_dim],
-                                                     initializer=tf.random_uniform_initializer(minval=-1., maxval=1.))
+            with tf.variable_scope(tf.contrib.framework.get_name_scope(), reuse=tf.AUTO_REUSE):
+                self.context_embedding = tf.get_variable('context_embedding', [args.num_of_nodes, args.embedding_dim],
+                                                         initializer=tf.random_uniform_initializer(minval=-1., maxval=1.))
             self.u_j_embedding = tf.matmul(tf.one_hot(self.u_j, depth=args.num_of_nodes), self.context_embedding)
 
         self.inner_product = tf.reduce_sum(self.u_i_embedding * self.u_j_embedding, axis=1)

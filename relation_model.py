@@ -18,13 +18,13 @@ def create_training_set(training_graph, embeddings, libraries, keywords):
         training_features.append(np.multiply(embeddings[node1], embeddings[node2]))
         training_values.append(1)
 
-    negative_values_per_node = len(list(training_graph.edges()))/len(libraries)
-    print(negative_values_per_node)
     nodes_names = list(training_graph.nodes())
+    negative_values_per_node = len(training_values)/len(libraries)-40
     random.seed(20)
+
     for node in nodes_names:
         count = 0
-        if node in libraries:
+        if node[4:] in libraries:
             while count < negative_values_per_node:
                 random_node = random.choice(nodes_names)
                 if random_node in keywords and not (training_graph.has_edge(node, random_node)):

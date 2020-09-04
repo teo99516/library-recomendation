@@ -48,16 +48,20 @@ def calculate_similarity(libraries, embeddings, lib_key_graph, path_keywords, id
     sim = {library: 0 for library in libraries}
     #if idf == "True":
     #    idf_dict = tokenize_files.tf_idf(train_keywords, file_paths)
+    path_keywords = [keyword for keyword in path_keywords if idf_dict.get(keyword, 0)<1]
+    posistional_importance = {keyword: 1.5**position for position, keyword in enumerate(path_keywords)}
     if method == "cosine":
         for library in libraries:
-            for keyword in path_keywords:
-                if keyword in nodes and library in nodes:
-                    lib_array = embeddings[library]
+            for keyword in path_keywords: #nx.ego_graph(lib_key_graph, 'lib:'+library,1):
+                if keyword in nodes and 'lib:' + library in nodes:
+                    lib_array = embeddings['lib:' +library]
                     keyword_array = embeddings[keyword]
-                    cos_similarity = np.dot(lib_array, keyword_array) / (norm(lib_array) * norm(keyword_array))
+                    #if keyword not in nx.ego_graph(lib_key_graph, 'lib:'+library,3): #lib_key_graph._adj['lib:'+library]:
+                    #    continue
+                    cos_similarity =np.dot(lib_array, keyword_array) / (norm(lib_array) * norm(keyword_array)) *posistional_importance[keyword]
                     if idf == "True":
                         if keyword in idf_dict.keys():
-                            sim[library] = sim[library] + cos_similarity * idf_dict[keyword]
+                            sim[library] = sim[library] + cos_similarity * idf_dict.get(keyword,1)/idf_dict.get(library,1)
                         else:
                             sim[library] = sim[library] + cos_similarity
                     else:
@@ -65,13 +69,13 @@ def calculate_similarity(libraries, embeddings, lib_key_graph, path_keywords, id
     elif method == "dot":
         for library in libraries:
             for keyword in path_keywords:
-                if keyword in nodes and library in nodes:
-                    lib_array = embeddings[library]
+                if keyword in nodes and 'lib:'+ library in nodes:
+                    lib_array = embeddings['lib:' +library]
                     keyword_array = embeddings[keyword]
-                    dot_similarity = np.dot(lib_array, keyword_array)
+                    dot_similarity = np.dot(lib_array, keyword_array)*posistional_importance[keyword]
                     if idf == "True":
                         if keyword in idf_dict.keys():
-                            sim[library] = sim[library] + dot_similarity * idf_dict[keyword]
+                            sim[library] = sim[library] + dot_similarity * idf_dict.get(keyword,1)/idf_dict.get(library,1)
                         else:
                             sim[library] = sim[library] + dot_similarity
                     else:
@@ -84,16 +88,17 @@ def caclulate_function_similarity(libraries, embeddings, lib_key_graph, path_key
     nodes = lib_key_graph.nodes()
     # Initialize a dictionary with 0 for the cos similarity of every library
     sim = {library: 0 for library in libraries}
-
+    path_keywords = [keyword for keyword in path_keywords if idf_dict.get(keyword, 0) < 1]
+    posistional_importance = {keyword: 1.5 ** position for position, keyword in enumerate(path_keywords)}
     for library in libraries:
         for keyword in path_keywords:
-            if keyword in nodes and library in nodes:
-                lib_features = scaler.transform([embeddings[library]])
+            if keyword in nodes and 'lib:' + library in nodes:
+                lib_features = scaler.transform([embeddings['lib:' +library]])
                 key_features = scaler.transform([embeddings[keyword]])
                 function_similarity = model.predict(np.multiply(lib_features, key_features))
                 if idf == "True":
                     if keyword in idf_dict.keys():
-                        sim[library] = sim[library] + int(function_similarity[0]) * idf_dict[keyword]
+                        sim[library] = sim[library] + int(function_similarity[0]) * idf_dict.get(keyword,1)/idf_dict.get(library,1) *posistional_importance[keyword]
                     else:
                         sim[library] = sim[library] + int(function_similarity[0])
                 else:
@@ -103,7 +108,7 @@ def caclulate_function_similarity(libraries, embeddings, lib_key_graph, path_key
 
 # Predict the values for the libraries in this file using the adjacency matrix and an graph signal
 # with 1s where keyword exists and 0 where keyword doesn't
-def predict_values_with_graph(path_keywords, training_graph):
+def  predict_values_with_graph(path_keywords, training_graph):
     adj_matrix = nx.to_numpy_matrix(training_graph)
     node_atr = list(repeat(0, len(adj_matrix)))
     nodes_names = list(training_graph.nodes())
@@ -119,15 +124,15 @@ def predict_values_with_graph(path_keywords, training_graph):
 def get_embeddings(training_graph, embedddings_method="line", proximity_method="both"):
     if embedddings_method == "line":
         if proximity_method == "both":
-            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
+            args = Namespace(embedding_dim=16, batch_size=128, K=5, proximity="first-order", learning_rate=0.025,
                              mode="train", num_batches=1000, total_graph=True,
-                             graph_file="line_algo/data/lib_rec.gpickle")
+                             graph_file="line_algo/data/keras-graph.gpickle")
             # Dictionary with the embedding of every library using L.I.N.E. algorithm
             embeddings_first = line.train(args)
 
-            args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
+            args = Namespace(embedding_dim=16, batch_size=128, K=5, proximity="second-order", learning_rate=0.025,
                              mode="train", num_batches=1000, total_graph=True,
-                             graph_file="line_algo/data/lib_rec.gpickle")
+                             graph_file="line_algo/data/keras-graph.gpickle")
             embeddings_second = line.train(args)
             embeddings = {}
             for node in training_graph.nodes():
@@ -135,13 +140,13 @@ def get_embeddings(training_graph, embedddings_method="line", proximity_method="
         elif proximity_method == "first":
             args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="first-order", learning_rate=0.025,
                              mode="train", num_batches=1000, total_graph=True,
-                             graph_file="line_algo/data/lib_rec.gpickle")
+                             graph_file="line_algo/data/keras-graph.gpickle")
             # Dictionary with the embedding of every library using L.I.N.E. algorithm
             embeddings = line.train(args)
         elif proximity_method == "second":
             args = Namespace(embedding_dim=16, batch_size=16, K=5, proximity="second-order", learning_rate=0.025,
                              mode="train", num_batches=1000, total_graph=True,
-                             graph_file="line_algo/data/lib_rec.gpickle")
+                             graph_file="line_algo/data/keras-graph.gpickle")
             # Dictionary with the embedding of every library using L.I.N.E. algorithm
             embeddings = line.train(args)
     elif embedddings_method == "node2vec":
@@ -233,6 +238,10 @@ def test_files_with_embeddings(test_set, file_paths, libraries, keywords, simila
 
 def load_model_data():
 
+    with open('idf.data', 'rb') as filehandle:
+        # store the data as binary data stream
+        idf_dict = pickle.load(filehandle)
+
     with open('libraries.data', 'rb') as filehandle:
         # store the data as binary data stream
         libraries = pickle.load(filehandle)
@@ -258,12 +267,12 @@ def load_model_data():
         test_domains_keywords = pickle.load(filehandle)
 
     return libraries, keywords, test_domains_libraries, test_domains_keywords, \
-           train_domains_libraries, train_domains_keywords
+           train_domains_libraries, train_domains_keywords, idf_dict
 
 
 def predict_libraries():
 
-    dataset_name = "projects"
+    dataset_name = "keras"
     if dataset_name == "keras":
         libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, \
         train_domains_libraries, train_domains_keywords = load_keras()
@@ -271,24 +280,23 @@ def predict_libraries():
         libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
         train_domains_keywords = load_dataset(number_of_methods=50000, num_of_keywords_after_dot=0)
 
-    print(len(train_domains_libraries))
-    print(len(test_domains_libraries))
 
     # Store graph in a file
-    nx.write_gpickle(lib_key_graph, "line_algo/data/lib_rec.gpickle")
+    nx.write_gpickle(lib_key_graph, "line_algo/data/keras-graph.gpickle")
 
+    '''
     libraries2, keywords2, test_domains_libraries2, test_domains_keywords2, train_domains_libraries2, \
     train_domains_keywords2 = load_model_data()
-
+    '''
     embeddings_method = "line"
     have_embeddings = "True"
     random_predict = "False"
     similarity_methods = ['cosine', 'dot', 'function']
     proximities = ['first', 'second']
-    idf_uses = ['False']
+    idf_uses = ['True']
 
+    '''
     if have_embeddings == "False":
-        '''
         for domain in test_domains_libraries.keys():
 
             hit_rate = []
@@ -331,90 +339,94 @@ def predict_libraries():
                 # Relevance score=1 if a library that was predicted is in path's libraries
                 ndcg.append(ndcg_score([np.array(labels)], [np.array(conf)]))
                 print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
-        print("Coverage", len(libraries_predicted_list) / len(libraries))
-        '''
     else:
-        results = open('results.csv', mode='w')
-        results = csv.writer(results, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        results.writerow(["1st Prox.", "2st Prox.", 'idf', "Similarity", "HitRate@10", "AUC", "NDCG", "Coverage"])
-        for proximity in proximities:
-            for idf_use in idf_uses:
-                for similarity_method in similarity_methods:
-                    results.writerow([proximity, similarity_method, idf_use])
-                    coverage = []
-                    hit_rate = []
-                    auc = []
-                    ndcg = []
-                    for i in range(10):
+    '''
 
-                        embeddings = get_embeddings(lib_key_graph, embeddings_method, proximity_method=proximity)
-                        idf_dict = tokenize_files.tf_idf(train_domains_keywords)
+    results = open('results.csv', mode='w')
+    results = csv.writer(results, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    results.writerow(["1st Prox.", "2st Prox.", 'idf', "Similarity", "HitRate@10", "AUC", "NDCG", "Coverage"])
 
-                        if similarity_method == 'function':
-                            # Create training set for the model of the similarity prediction
-                            training_features, training_values = relation_model.create_training_set(lib_key_graph, embeddings,
-                                                                                                    libraries, keywords)
-                            # Train the relation model
-                            scaler, model = relation_model.train_relation_model(training_features, training_values)
+    idf_dict = {**tokenize_files.tf_idf(train_domains_keywords), **tokenize_files.tf_idf(train_domains_libraries)}
 
-                        libraries_predicted_list =[]
-                        # Store the results in a file
-                        for domain in test_domains_libraries.keys():
-                            # Check if libraries was identified in this domain
-                            if len(test_domains_libraries[domain]) > 0:
 
-                                path_keywords = test_domains_keywords[domain]
-                                path_libraries = test_domains_libraries[domain]
-                                if len(path_libraries) > 5:
-                                    # Get the path's libraries and keyword for the specific file in the path
-                                    print('Predict path: ', domain)
-                                    print("Number of libraries in this file: ", len(test_domains_libraries[domain]))
+    for proximity in proximities:
+        for idf_use in idf_uses:
+            for similarity_method in similarity_methods:
+                results.writerow([proximity, similarity_method, idf_use])
 
-                                    # Calculate similarity and save it in a dictionary
-                                    if similarity_method == "function":
-                                        sim = caclulate_function_similarity(libraries, embeddings, lib_key_graph, path_keywords, scaler,
-                                                                            model,
-                                                                            idf_dict, idf=idf_use)
-                                    else:
-                                        sim = calculate_similarity(libraries, embeddings, lib_key_graph, path_keywords, idf_dict,
-                                                                   method=similarity_method, idf=idf_use)
-                                    # print(sim)
-                                    # Get the largest 5 values
-                                    predicted_libraries = nlargest(10, sim, key=sim.get)
-                                    print("Libraries predicted: ", predicted_libraries)
-                                    print("Path libraries:", path_libraries, "\n")
+                coverage = []
+                hit_rate = []
+                auc = []
+                ndcg = []
+                # Store the results in a file
+                for i in range(10):
 
-                                    libraries_predicted_list = libraries_predicted_list + predicted_libraries
-                                    for library in predicted_libraries:
-                                        if library in path_libraries:
-                                            print(library)
-                                    # Hit rate for Top-5 libraries
-                                    hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
-                                    hit_rate.append(hit_rate_temp)
-                                    print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
-                                    # Calculate AUC
-                                    labels = [1 if library in path_libraries else 0 for library in sim.keys()]
-                                    conf = list(sim.values())
-                                    if 1 in labels and 0 in labels:
-                                        auc_temp = roc_auc_score(np.array(labels), np.array(conf))
-                                        auc.append(auc_temp)
-                                        print("ROC AUC: ", auc_temp, "\n")
-                                    # Calculate Normalized Cumulative Score
-                                    # Relevance score=1 if a library that was predicted is in path's libraries
-                                    ndcg_temp = ndcg_score([np.array(labels)], [np.array(conf)])
-                                    ndcg.append(ndcg_temp)
-                                    print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
-                        #results.writerow([ sum(hit_rate) / len(hit_rate), sum(auc) / len(auc), sum(ndcg) / len(ndcg)])
-                        libraries_predicted_list = list(set(libraries_predicted_list))
-                        #results.writerow([len(libraries_predicted_list)/len(libraries)*100])
-                        coverage.append(len(libraries_predicted_list)/len(libraries))
-                    results.writerow([sum(hit_rate) / len(hit_rate), sum(auc) / len(auc), sum(ndcg) / len(ndcg),
-                                      sum(coverage)/len(coverage)*100])
+                    if similarity_method == 'function':
+                        # Create training set for the model of the similarity prediction
+                        training_features, training_values = relation_model.create_training_set(lib_key_graph,
+                                                                                                embeddings,
+                                                                                                libraries, keywords)
+                        # Train the relation model
+                        scaler, model = relation_model.train_relation_model(training_features, training_values)
+
+                    embeddings = get_embeddings(lib_key_graph, embeddings_method, proximity_method=proximity)
+
+                    libraries_predicted_list = []
+
+                    for domain in test_domains_libraries.keys():
+                        # Check if libraries was identified in this domain
+                        if len(test_domains_libraries[domain]) >= 0 : #and len(test_domains_libraries[domain])> 5:
+
+                            path_keywords = test_domains_keywords[domain]
+                            path_libraries = test_domains_libraries[domain]
+                            print('Predict path: ', domain)
+                            print("Number of libraries in this file: ", len(test_domains_libraries[domain]))
+
+                            # Calculate similarity and save it in a dictionary
+                            if similarity_method == "function":
+                                sim = caclulate_function_similarity(libraries, embeddings, lib_key_graph, path_keywords, scaler,
+                                                                    model,
+                                                                    idf_dict, idf=idf_use)
+                            else:
+                                sim = calculate_similarity(libraries, embeddings, lib_key_graph, path_keywords, idf_dict,
+                                                           method=similarity_method, idf=idf_use)
+                            # print(sim)
+                            # Get the largest 5 values
+                            predicted_libraries = nlargest(10, sim, key=sim.get)
+                            print("Libraries predicted: ", predicted_libraries)
+                            print("Path libraries:", path_libraries, "\n")
+
+                            libraries_predicted_list = libraries_predicted_list + predicted_libraries
+                            for library in predicted_libraries:
+                                if library in path_libraries:
+                                    print(library)
+                            # Hit rate for Top-5 libraries
+                            hit_rate_temp = calculate_hit_rate(path_libraries, predicted_libraries)
+                            hit_rate.append(hit_rate_temp)
+                            print("Hit Rate @", len(predicted_libraries), ": ", hit_rate_temp)
+                            # Calculate AUC
+                            labels = [1 if library in path_libraries else 0 for library in sim.keys()]
+                            conf = list(sim.values())
+                            if 1 in labels and 0 in labels:
+                                auc_temp = roc_auc_score(np.array(labels), np.array(conf))
+                                auc.append(auc_temp)
+                                print("ROC AUC: ", auc_temp, "\n")
+                            # Calculate Normalized Cumulative Score
+                            # Relevance score=1 if a library that was predicted is in path's libraries
+                            ndcg_temp = ndcg_score([np.array(labels)], [np.array(conf)])
+                            ndcg.append(ndcg_temp)
+                            print("Discounted Cumulative Gain: ", ndcg_score([np.array(labels)], [np.array(conf)]), '\n')
+                    libraries_predicted_list = list(set(libraries_predicted_list))
+                    coverage.append(len(libraries_predicted_list) / len(libraries))
+                results.writerow([sum(hit_rate) / len(hit_rate), sum(auc) / len(auc), sum(ndcg) / len(ndcg),
+                                                            len(libraries_predicted_list) / len(libraries) * 100])
+            #results.writerow([sum(hit_rate) / len(hit_rate), sum(auc) / len(auc), sum(ndcg) / len(ndcg),
+            #                  sum(coverage)/len(coverage)*100])
 
     libraries.sort()
     print(libraries)
 
-    print(" \n Hit rate @", " \n        Average: ", sum(hit_rate) / len(hit_rate),
+    print(" \n Hit rate @", len(predicted_libraries), " \n        Average: ", sum(hit_rate) / len(hit_rate),
           " \n        STD: ", np.std(hit_rate))
     print("        Range: ", min(hit_rate), " - ", max(hit_rate))
 
@@ -456,3 +468,34 @@ def load_keras(graph_method = "co-occur"):
 
 if __name__ == "__main__":
     predict_libraries()
+    '''
+    dataset_name = "projects"
+    if dataset_name == "keras":
+        libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, \
+        train_domains_libraries, train_domains_keywords = load_keras()
+    else:
+        libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
+        train_domains_keywords = load_dataset(number_of_methods=100000, num_of_keywords_after_dot=0)
+
+    # Store graph in a file
+    nx.write_gpickle(lib_key_graph, "line_algo/data/lib_rec.gpickle")
+
+    embeddings_method = "line"
+    have_embeddings = "True"
+    random_predict = "False"
+    similarity_method = 'cosine'
+    proximity = 'both'
+    idf_use = 'False'
+
+    embeddings = get_embeddings(lib_key_graph, embeddings_method, proximity_method=proximity)
+    idf_dict = tokenize_files.tf_idf(train_domains_keywords)
+    path_keywords = test_domains_keywords[5]
+    for key in path_keywords:
+        sim = calculate_similarity(libraries, embeddings, lib_key_graph, [key], idf_dict,
+                                   method=similarity_method, idf=idf_use)
+        predicted_libraries = nlargest(10, sim, key=sim.get)
+        print("Keyword: ", key)
+        print(predicted_libraries)
+
+        #path_libraries = test_domains_libraries[domain]
+    '''

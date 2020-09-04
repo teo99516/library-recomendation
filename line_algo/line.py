@@ -42,7 +42,7 @@ def train(args):
                 embedding = sess.run(model.embedding)
                 normalized_embedding = embedding / np.linalg.norm(embedding, axis=1, keepdims=True)
                 pickle.dump(data_loader.embedding_mapping(normalized_embedding),
-                            open('line_algo/data/embedding_%s.gpickle' % suffix, 'wb'))
+                            open('line_algo/data/embedding_keras_%s.gpickle' % suffix, 'wb'))
 
     return data_loader.embedding_mapping(normalized_embedding)
 

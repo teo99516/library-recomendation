@@ -61,14 +61,14 @@ def create_graph(file_paths):
 def add_values_to_graph(path_libraries, path_keywords, lib_key_graph):
     # Check if an edge exits in the graph. If so, then increase weight by one
     lib_key_graph.add_weighted_edges_from(
-        [(library, keyword, int(lib_key_graph.get_edge_data(library, keyword)['weight']) + 1)
+        [('lib:'+ library, keyword, int(lib_key_graph.get_edge_data('lib:'+ library, keyword)['weight']) + 1)
          for library in path_libraries for keyword in path_keywords
-         if lib_key_graph.has_edge(library, keyword)])
+         if lib_key_graph.has_edge('lib:'+ library, keyword)])
 
     # Connect each library with all the keywords(nodes are creates automatically if they don't' exist on the graph)
     lib_key_graph.add_weighted_edges_from(
-        [(library, keyword, 1) for library in path_libraries for keyword in path_keywords
-         if not (lib_key_graph.has_edge(library, keyword))])
+        [('lib:'+ library, keyword, 1) for library in path_libraries for keyword in path_keywords
+         if not (lib_key_graph.has_edge('lib:'+ library, keyword))])
 
     return lib_key_graph
 

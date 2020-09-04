@@ -6,10 +6,10 @@ from graph_creator import add_values_to_graph
 import networkx as nx
 import re
 import requests
-from lxml import html
 import random
 from collections import Counter
 import pickle
+from tokenize_files import tf_idf
 
 def pretty(text):
     return text.replace(' DCNL ', '\n ').replace(' DCSP ', ' ')
@@ -118,53 +118,6 @@ def get_libraries_and_keywords(keywords_to_test, libraries, declaration_objects,
     return actual_libraries, actual_keywords
 
 
-# Get README files from github
-def get_readme(number_of_methods):
-    methods = load(limit=number_of_methods)
-    repos_readme = {}
-    count_repo = 0
-    found = False
-
-    for method in methods:
-        # print(method.repo)
-        if method.repo not in repos_readme.keys():
-            if count_repo == 5 or count_repo == 15 or count_repo == 25:
-                time.sleep(60)
-            count_repo = count_repo + 1
-            print("Progress: ", count_repo)
-            read_me = requests.get('https://raw.github.com/' + method.repo[7:] + '/master/README.md')
-            time.sleep(1 + .100 * random())
-            if not found:
-                if read_me.status_code == 200:
-                    repos_readme[method.repo] = read_me.text
-                    found = True
-                    # print(read_me.text)
-            if not found:
-                read_me = requests.get('https://raw.github.com/' + method.repo[7:] + '/master/README')
-                time.sleep(1 + .100 * random())
-                if read_me.status_code != 404:
-                    repos_readme[method.repo] = read_me.text
-                    found = True
-                    # print(read_me.text)
-            if not found:
-                read_me = requests.get('https://raw.github.com/' + method.repo[7:] + '/master/README.txt')
-                time.sleep(1 + .100 * random())
-                if read_me.status_code != 404:
-                    repos_readme[method.repo] = read_me.text
-                    found = True
-                    # print(read_me.text)
-            if not found:
-                read_me = requests.get('https://raw.github.com/' + method.repo[7:] + '/master/README.rst')
-                time.sleep(1 + .100 * random())
-                if read_me.status_code != 404:
-                    repos_readme[method.repo] = read_me.text
-                    found = True
-                    # print(read_me.text)
-            found = False
-    print("Repo counted:", count_repo)
-    print("Readme counted", len(repos_readme.keys()))
-
-
 # Load a method's keywords and libraries
 def load_train_method(method, libraries, num_of_keywords_after_dot=1, description_use = "True"):
 
@@ -251,8 +204,12 @@ def remove_libs_and_keys(libraries, keywords, lib_key_graph, test_domains_librar
     # Remove nodes from the graph that was deleted from libraries and keywords list
     nodes = list(lib_key_graph.nodes())
     for node in nodes:
-        if node not in libraries and node not in keywords:
-            lib_key_graph.remove_node(node)
+        if 'lib:' in node:
+            if node[4:] not in libraries:
+                lib_key_graph.remove_node(node)
+        else:
+            if node not in keywords:
+                lib_key_graph.remove_node(node)
 
     lib_key_graph.remove_nodes_from(list(nx.isolates(lib_key_graph)))
 
@@ -261,6 +218,14 @@ def remove_libs_and_keys(libraries, keywords, lib_key_graph, test_domains_librar
 
 def store_data(libraries, keywords, test_domains_libraries, test_domains_keywords, train_domains_libraries,
            train_domains_keywords):
+
+    idf_dict = {**tf_idf(train_domains_keywords), **tf_idf(train_domains_libraries)}
+    print(idf_dict)
+
+    with open('idf.data', 'wb') as filehandle:
+        # store the data as binary data stream
+        pickle.dump(idf_dict, filehandle)
+        filehandle.close()
 
     with open('libraries.data', 'wb') as filehandle:
         # store the data as binary data stream
@@ -340,19 +305,6 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
 
         else:
             '''
-            test_domains_keywords[1]= ['how', 'to', 'get', 'curent', 'time']
-            test_domains_keywords[2] = ['how', 'to', 'sort', 'dictionary' ]
-            test_domains_keywords[3] = ['how', 'to', 'check', 'whether', 'file', "exists", 'without', 'exceptions']
-            test_domains_keywords[4] = ['how', 'to', 'clone', 'or', 'copy', "list"]
-            test_domains_keywords[5] = ['how', 'to', 'split', 'a', 'list', 'into', 'evenly', 'sized', 'chunks']
-            test_domains_keywords[6] = ['how', 'to', 'copy', 'a', 'file']
-            test_domains_keywords[7] = ['how', 'to', 'count', 'occurrences','of', 'a', 'list', 'item']
-            test_domains_keywords[8] = ['how', 'to', 'use', 'threading']
-            test_domains_keywords[9] = ['how', 'to', 'connect', 'Mysql','database']
-            test_domains_keywords[10] = ['how', 'to', 'write', 'json', 'data', 'to', 'file']
-            test_domains_libraries = {number:[] for number in test_domains_keywords.keys()}
-
-            '''
             if method.repo not in train_domains_libraries.keys():
 
                 # Load libraries and keywords for the method
@@ -371,7 +323,27 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                 else:
                     test_domains_libraries[method.name] = actual_libraries
                     test_domains_keywords[method.name] = actual_keywords
-            counter = counter + 1
+
+            counter = counter + 1 
+            '''
+            _,  test_domains_keywords[1] = get_libs_and_keywords_file('calling an external command', double_keywords_held=True, dot_break=False, stem_use="True") #subprocess , os, shlex
+            _,  test_domains_keywords[2] = get_libs_and_keywords_file('How to sort a dictionary by value', double_keywords_held=True, dot_break=False, stem_use="True") # operator, collections , operator.itemgetter
+            _,  test_domains_keywords[3] = get_libs_and_keywords_file('How to convert string represantation of list to a list', double_keywords_held=True, dot_break=False, stem_use="True") #ast, json, re, pyparsing
+            _,  test_domains_keywords[4] = get_libs_and_keywords_file('How do i merge two dictionaries in a single expression', double_keywords_held=True, dot_break=False, stem_use="True") #collections.ChainMap, itertools.chain, copy
+            _,  test_domains_keywords[5] = get_libs_and_keywords_file('Converting string into datetime', double_keywords_held=True, dot_break=False, stem_use="True") #datetime ,dateutil , timestring
+            _,  test_domains_keywords[6] = get_libs_and_keywords_file('How to import a module with the full path', double_keywords_held=True, dot_break=False, stem_use="True") #imp, importlib.util, runpy , pkgutil
+            _,  test_domains_keywords[7] = get_libs_and_keywords_file('How can you profile a python script', double_keywords_held=True, dot_break=False, stem_use="True") #cProfile
+            _,  test_domains_keywords[8] = get_libs_and_keywords_file('How to get current time', double_keywords_held=True, dot_break=False, stem_use="True")   #time, datetime , pandas, numpy, arrow
+            _,  test_domains_keywords[9] = get_libs_and_keywords_file('How do I concatenate two lists', double_keywords_held=True, dot_break=False, stem_use="True")  #itertools, heapq, operator
+            _,  test_domains_keywords[10] = get_libs_and_keywords_file('How to count occurrences of a list item', double_keywords_held=True, dot_break=False, stem_use="True") #numpy, more_itertools, collections
+            _,  test_domains_keywords[11] = get_libs_and_keywords_file('How do I download a file over HTTP', double_keywords_held=True, dot_break=False, stem_use="True") #urllib, requests, wget, pycurl
+            _,  test_domains_keywords[12] = get_libs_and_keywords_file('How to use threading', double_keywords_held=True, dot_break=False, stem_use="True") #threading, multiprocessing, concurrent
+            _,  test_domains_keywords[13] = get_libs_and_keywords_file('how to connect to mysql database', double_keywords_held=True, dot_break=False, stem_use="True") #MySQLdb, peewee, mysql.connector, pymysql, oursql, flask_mysqldb
+            _,  test_domains_keywords[14] = get_libs_and_keywords_file('how to write json data to a file', double_keywords_held=True, dot_break=False, stem_use="True") #json, mpu.io
+            _,  test_domains_keywords[15] = get_libs_and_keywords_file('How to get POSTed JSON in Flask', double_keywords_held=True, dot_break=False, stem_use="True") #flask, requests, json
+
+            test_domains_libraries = {number:[] for number in test_domains_keywords.keys()}
+
 
     # Construct the graph if training by project was chosen
     if train_by_method == "False":
@@ -380,8 +352,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
 
 
     number_of_projects = len(train_domains_libraries.keys())
-    KEY_THRESHOLD = 0.02 * number_of_projects
-    LIB_THRESHOLD = 0.04 * number_of_projects
+    KEY_THRESHOLD = 0.02 * number_of_projects + 1
+    LIB_THRESHOLD = 0.04 * number_of_projects + 1
 
     times_used_libs, times_used = count_times_used(train_domains_libraries, train_domains_keywords)
 
@@ -430,9 +402,23 @@ if __name__ == "__main__":
     #libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
     #train_domains_keywords = load_dataset(number_of_methods=50000, num_of_keywords_after_dot=0)
 
-    #print("Training projects: ", len(test_domains_libraries.keys()))
-    methods = load(limit=50000)
+    number_of_methods = 100000
+    methods = load(limit=number_of_methods)
+    train_domains=[]
+    counter=0
+    for method in methods:
+        if counter <= 0.8 * number_of_methods:
+            if method.repo not in train_domains:
+                train_domains.append( method.repo)
+            counter = counter +1
 
+    print(len(train_domains))
+
+
+
+    '''
+    number_of_methods = 50000
+    methods = load(limit=number_of_methods)
     methods_checked = []
     tag_list = []
     progress = 0
@@ -450,5 +436,5 @@ if __name__ == "__main__":
         #print("Progress ", progress/number_of_methods*100)
         progress = progress + 1
     print(Counter(tag_list))
-
+    '''
     # get_readme(number_of_methods=3000)
