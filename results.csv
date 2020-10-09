@@ -1,0 +1,4 @@
+1st Prox.,2st Prox.,idf,Similarity,HitRate@10,AUC,NDCG,Coverage
+first,cosine,True
+0.2830769230769231,0.4972641856932256,0.6051935219981961,34.11764705882353
+first,dot,True

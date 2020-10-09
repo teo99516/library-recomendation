@@ -1,6 +1,5 @@
 import tokenize_files
 import os
-import re
 import networkx as nx
 import matplotlib.pyplot as plt
 

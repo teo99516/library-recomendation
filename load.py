@@ -10,6 +10,8 @@ import random
 from collections import Counter
 import pickle
 from tokenize_files import tf_idf
+from library_predict import get_embeddings
+
 
 def pretty(text):
     return text.replace(' DCNL ', '\n ').replace(' DCSP ', ' ')
@@ -67,6 +69,69 @@ def load(data="dataset/parallel/parallel", limit=300000):
     return iter(Loader(data, limit))
 
 
+def get_queries():
+    test_domains_keywords = {}
+    test_domains_libraries = {}
+    _, test_domains_keywords[1] = get_libs_and_keywords_file('Calling an external command', double_keywords_held=True,
+                                                             dot_break=False, stem_use="True")  # subprocess , os, shlex
+    test_domains_libraries[1] = ['subprocess', 'os', 'shlex']
+    _, test_domains_keywords[2] = get_libs_and_keywords_file('How to sort a dictionary by value',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True")  # operator, collections , operator.itemgetter
+    test_domains_libraries[2] = ['operator', 'collections']
+    _, test_domains_keywords[3] = get_libs_and_keywords_file('How to convert string representation of list to a list',
+                                                             double_keywords_held=False, dot_break=False,
+                                                             stem_use="True")  # ast, json, re, pyparsing
+    test_domains_libraries[3] = ['ast', 'json', 're', 'pyparsing']
+    _, test_domains_keywords[4] = get_libs_and_keywords_file('How do i merge two dictionaries in a single expression',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True")  # collections.ChainMap, itertools.chain, copy
+    test_domains_libraries[4] = ['collections', 'itertools', 'copy']
+    _, test_domains_keywords[5] = get_libs_and_keywords_file('Converting string into datetime',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True")  # datetime ,dateutil , timestring
+    test_domains_libraries[5] = ['datetime', 'dateutil', 'timestring']
+    _, test_domains_keywords[6] = get_libs_and_keywords_file('How to import a module given the full path',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True",
+                                                             return_libraries=False)  # imp, importlib.util, runpy , pkgutil
+    test_domains_libraries[6] = ['imp', 'importlib', 'runpy', 'pkgutil']
+    _, test_domains_keywords[7] = get_libs_and_keywords_file('How to get current time', double_keywords_held=True,
+                                                             dot_break=False,
+                                                             stem_use="True")  # time, datetime , pandas, numpy, arrow
+    test_domains_libraries[7] = ['time', 'datetime', 'pandas', 'numpy', 'arrow']
+    _, test_domains_keywords[8] = get_libs_and_keywords_file('How do I concatenate two lists',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True")  # itertools, heapq, operator
+    test_domains_libraries[8] = ['itertools', 'heapq', 'operator']
+    _, test_domains_keywords[9] = get_libs_and_keywords_file('How to count occurrences of a list item',
+                                                             double_keywords_held=True, dot_break=False,
+                                                             stem_use="True")  # numpy, more_itertools, collections
+    test_domains_libraries[9] = ['numpy', 'more_itertools', 'collections']
+    _, test_domains_keywords[10] = get_libs_and_keywords_file('How do I download a file over HTTP',
+                                                              double_keywords_held=True, dot_break=False,
+                                                              stem_use="True")  # urllib, requests, wget, pycurl
+    test_domains_libraries[10] = ['urllib', 'requests', 'wget', 'pycurl']
+    _, test_domains_keywords[11] = get_libs_and_keywords_file('How to use threading', double_keywords_held=True,
+                                                              dot_break=False,
+                                                              stem_use="True")  # threading, multiprocessing, concurrent
+    test_domains_libraries[11] = ['threading', 'multiprocessing', 'concurrent']
+    _, test_domains_keywords[12] = get_libs_and_keywords_file('how to connect to mysql database',
+                                                              double_keywords_held=True, dot_break=False,
+                                                              stem_use="True")  # MySQLdb, peewee, mysql.connector, pymysql, oursql, flask_mysqldb
+    test_domains_libraries[12] = ['MySQLdb', 'peewee', 'mysql', 'pymysql', 'oursql', 'flask_mysqldb']
+    _, test_domains_keywords[13] = get_libs_and_keywords_file('how to write json data to a file',
+                                                              double_keywords_held=True, dot_break=False,
+                                                              stem_use="True")  # json, mpu.io
+    test_domains_libraries[13] = ['json', 'mpu']
+    _, test_domains_keywords[14] = get_libs_and_keywords_file('How to get POSTed JSON in Flask',
+                                                              double_keywords_held=True, dot_break=False,
+                                                              stem_use="True")  # flask, requests, json
+    test_domains_libraries[14] = ['flask', 'requests', 'json']
+
+    return test_domains_keywords, test_domains_libraries
+
+
 # Split keywords with "." into libraries bases on number of keywords after dot used
 def split_libraries(keyword, actual_libraries, declaration_objects, method_body, num_of_keywords_after_dot=1):
     if keyword + " = " not in method_body:
@@ -119,8 +184,7 @@ def get_libraries_and_keywords(keywords_to_test, libraries, declaration_objects,
 
 
 # Load a method's keywords and libraries
-def load_train_method(method, libraries, num_of_keywords_after_dot=1, description_use = "True"):
-
+def load_train_method(method, libraries, num_of_keywords_after_dot=1, description_use="True"):
     print(method.repo)
     # print(method.description)
     # print(method.body)
@@ -150,8 +214,6 @@ def load_train_method(method, libraries, num_of_keywords_after_dot=1, descriptio
                                                                        declaration_objects, method.body,
                                                                        num_of_keywords_after_dot)
 
-    #actual_libraries = [library for library in libraries if library + " = " not in method.body]
-
     actual_libraries = list(set(actual_libraries + libraries_to_test))
     actual_keywords = list(set(actual_keywords))
     actual_keywords = remove_unwanted_words(actual_keywords)
@@ -159,9 +221,9 @@ def load_train_method(method, libraries, num_of_keywords_after_dot=1, descriptio
 
     return actual_libraries, actual_keywords
 
-# Count how many times libraries and keywords was used in the training set
-def count_times_used(train_domains_libraries, train_domains_keywords ):
 
+# Count how many times libraries and keywords was used in the training set
+def count_times_used(train_domains_libraries, train_domains_keywords):
     times_used = {}
     times_used_libs = {}
     # Count how many times a library was used in the projects
@@ -199,7 +261,8 @@ def remove_libs_and_keys(libraries, keywords, lib_key_graph, test_domains_librar
     # Keep only the keywords of the test set that were used more times than the lib_threshold
     for repo in test_domains_libraries:
         test_domains_libraries[repo] = [library for library in test_domains_libraries[repo]
-                                if times_used_libs.get(library, 0) >= LIB_THRESHOLD  and library not in libs_to_delete]
+                                        if times_used_libs.get(library,
+                                                               0) >= LIB_THRESHOLD and library not in libs_to_delete]
 
     # Remove nodes from the graph that was deleted from libraries and keywords list
     nodes = list(lib_key_graph.nodes())
@@ -216,45 +279,23 @@ def remove_libs_and_keys(libraries, keywords, lib_key_graph, test_domains_librar
     return libraries, keywords, lib_key_graph
 
 
-def store_data(libraries, keywords, test_domains_libraries, test_domains_keywords, train_domains_libraries,
-           train_domains_keywords):
-
+def store_data(libraries, keywords, train_domains_libraries, train_domains_keywords):
     idf_dict = {**tf_idf(train_domains_keywords), **tf_idf(train_domains_libraries)}
     print(idf_dict)
 
-    with open('idf.data', 'wb') as filehandle:
+    with open('data/idf.data', 'wb') as filehandle:
         # store the data as binary data stream
         pickle.dump(idf_dict, filehandle)
         filehandle.close()
 
-    with open('libraries.data', 'wb') as filehandle:
+    with open('data/libraries.data', 'wb') as filehandle:
         # store the data as binary data stream
         pickle.dump(libraries, filehandle)
         filehandle.close()
 
-    with open('keywords.data', 'wb') as filehandle:
+    with open('data/keywords.data', 'wb') as filehandle:
         # store the data as binary data stream
         pickle.dump(keywords, filehandle)
-        filehandle.close()
-
-    with open('training_libs.txt', 'wb') as filehandle:
-        # store the data as binary data stream
-        pickle.dump(test_domains_libraries, filehandle,protocol=pickle.HIGHEST_PROTOCOL)
-        filehandle.close()
-
-    with open('training_keys.txt', 'wb') as filehandle:
-        # store the data as binary data stream
-        pickle.dump(test_domains_keywords, filehandle, protocol=pickle.HIGHEST_PROTOCOL)
-        filehandle.close()
-
-    with open('testing_libs.txt', 'wb') as filehandle:
-        # store the data as binary data stream
-        pickle.dump(train_domains_libraries, filehandle)
-        filehandle.close()
-
-    with open('testing_keywords.txt', 'wb') as filehandle:
-        # store the data as binary data stream
-        pickle.dump(train_domains_keywords, filehandle )
         filehandle.close()
 
 
@@ -265,8 +306,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     for method in methods:
         method_list.append(method)
 
-    #method_list = method_list[int(0.5*len(method_list)):]
-    dataset_length=len(method_list)
+    # method_list = method_list[int(0.5*len(method_list)):]
+    dataset_length = len(method_list)
     counter = 1
     train_by_method = "True"
     predict_by_project = "True"
@@ -283,8 +324,9 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
         if counter <= 0.8 * dataset_length:
 
             # Load libraries and keywords for the method
-            actual_libraries, actual_keywords = load_train_method(method, libraries, num_of_keywords_after_dot= num_of_keywords_after_dot,
-                                                                  description_use= "True")
+            actual_libraries, actual_keywords = load_train_method(method, libraries,
+                                                                  num_of_keywords_after_dot=num_of_keywords_after_dot,
+                                                                  description_use="True")
 
             if train_by_method == "True":
                 # Add pairs of libraries and keywords into the graph of co-occurring
@@ -295,7 +337,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                 train_domains_libraries[method.repo] = actual_libraries
                 train_domains_keywords[method.repo] = actual_keywords
             else:
-                train_domains_libraries[method.repo] = list(set(train_domains_libraries[method.repo] + actual_libraries))
+                train_domains_libraries[method.repo] = list(
+                    set(train_domains_libraries[method.repo] + actual_libraries))
                 train_domains_keywords[method.repo] = list(set(train_domains_keywords[method.repo] + actual_keywords))
 
             libraries = libraries + actual_libraries
@@ -304,7 +347,6 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
             counter = counter + 1
 
         else:
-            '''
             if method.repo not in train_domains_libraries.keys():
 
                 # Load libraries and keywords for the method
@@ -324,32 +366,12 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
                     test_domains_libraries[method.name] = actual_libraries
                     test_domains_keywords[method.name] = actual_keywords
 
-            counter = counter + 1 
-            '''
-            _,  test_domains_keywords[1] = get_libs_and_keywords_file('calling an external command', double_keywords_held=True, dot_break=False, stem_use="True") #subprocess , os, shlex
-            _,  test_domains_keywords[2] = get_libs_and_keywords_file('How to sort a dictionary by value', double_keywords_held=True, dot_break=False, stem_use="True") # operator, collections , operator.itemgetter
-            _,  test_domains_keywords[3] = get_libs_and_keywords_file('How to convert string represantation of list to a list', double_keywords_held=True, dot_break=False, stem_use="True") #ast, json, re, pyparsing
-            _,  test_domains_keywords[4] = get_libs_and_keywords_file('How do i merge two dictionaries in a single expression', double_keywords_held=True, dot_break=False, stem_use="True") #collections.ChainMap, itertools.chain, copy
-            _,  test_domains_keywords[5] = get_libs_and_keywords_file('Converting string into datetime', double_keywords_held=True, dot_break=False, stem_use="True") #datetime ,dateutil , timestring
-            _,  test_domains_keywords[6] = get_libs_and_keywords_file('How to import a module with the full path', double_keywords_held=True, dot_break=False, stem_use="True") #imp, importlib.util, runpy , pkgutil
-            _,  test_domains_keywords[7] = get_libs_and_keywords_file('How can you profile a python script', double_keywords_held=True, dot_break=False, stem_use="True") #cProfile
-            _,  test_domains_keywords[8] = get_libs_and_keywords_file('How to get current time', double_keywords_held=True, dot_break=False, stem_use="True")   #time, datetime , pandas, numpy, arrow
-            _,  test_domains_keywords[9] = get_libs_and_keywords_file('How do I concatenate two lists', double_keywords_held=True, dot_break=False, stem_use="True")  #itertools, heapq, operator
-            _,  test_domains_keywords[10] = get_libs_and_keywords_file('How to count occurrences of a list item', double_keywords_held=True, dot_break=False, stem_use="True") #numpy, more_itertools, collections
-            _,  test_domains_keywords[11] = get_libs_and_keywords_file('How do I download a file over HTTP', double_keywords_held=True, dot_break=False, stem_use="True") #urllib, requests, wget, pycurl
-            _,  test_domains_keywords[12] = get_libs_and_keywords_file('How to use threading', double_keywords_held=True, dot_break=False, stem_use="True") #threading, multiprocessing, concurrent
-            _,  test_domains_keywords[13] = get_libs_and_keywords_file('how to connect to mysql database', double_keywords_held=True, dot_break=False, stem_use="True") #MySQLdb, peewee, mysql.connector, pymysql, oursql, flask_mysqldb
-            _,  test_domains_keywords[14] = get_libs_and_keywords_file('how to write json data to a file', double_keywords_held=True, dot_break=False, stem_use="True") #json, mpu.io
-            _,  test_domains_keywords[15] = get_libs_and_keywords_file('How to get POSTed JSON in Flask', double_keywords_held=True, dot_break=False, stem_use="True") #flask, requests, json
+            counter = counter + 1
 
-            test_domains_libraries = {number:[] for number in test_domains_keywords.keys()}
-
-
-    # Construct the graph if training by project was chosen
+            # Construct the graph if training by project was chosen
     if train_by_method == "False":
         for repo in train_domains_libraries.keys():
             lib_key_graph = add_values_to_graph(train_domains_libraries[repo], train_domains_keywords, lib_key_graph)
-
 
     number_of_projects = len(train_domains_libraries.keys())
     KEY_THRESHOLD = 0.02 * number_of_projects + 1
@@ -358,7 +380,8 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     times_used_libs, times_used = count_times_used(train_domains_libraries, train_domains_keywords)
 
     libraries, keywords, lib_key_graph = remove_libs_and_keys(libraries, keywords, lib_key_graph,
-            test_domains_libraries, times_used, times_used_libs, LIB_THRESHOLD, KEY_THRESHOLD )
+                                                              test_domains_libraries, times_used, times_used_libs,
+                                                              LIB_THRESHOLD, KEY_THRESHOLD)
 
     print("Number of Nodes in the graph: ", len(lib_key_graph.nodes()))
     print("Number of Edges in the graph: ", len(lib_key_graph.edges()))
@@ -366,75 +389,15 @@ def load_dataset(number_of_methods=10000, num_of_keywords_after_dot=1):
     print("Keywords ", len(keywords))
     print("Total number of projects: ", number_of_projects)
 
-    store_data(libraries, keywords, test_domains_libraries, test_domains_keywords, train_domains_libraries,
-               train_domains_keywords)
+    store_data(libraries, keywords, train_domains_libraries, train_domains_keywords)
+
+    _ = get_embeddings(lib_key_graph, graph_name='lib_rec', embeddings_method='line', proximity_method='both')
 
     return libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
            train_domains_keywords
 
-def request_github(methods, number_of_methods, item='Topic'):
-    progress=0
-    repos_readme = {}
-    methods_checked = []
-    for method in methods:
-        if method.repo not in methods_checked:
-            methods_checked.append(method.repo)
-            print(method.repo)
-            r = requests.get('https://github.com/' + method.repo[7:])
-            root = html.fromstring(r.content)
-            root.make_links_absolute('https://github.com/' + method.repo[7:])
-            if item == "Topic":
-                tagcloud = root.xpath('//a[contains(@title, "Topic:")]/text()')
-                if len(tagcloud) > 0:
-                    tagcloud = [tag.strip() for tag in tagcloud]
-            else:
-                tagcloud = root.xpath('//article[contains(@class,"entry-content")]/p/text()')
-                tagcloud = [tag for tag in tagcloud if tag != " " and tag != "."]
-                repos_readme[method.repo] = tagcloud[0:2]
-        print("Progress ", progress / number_of_methods * 100)
-        progress = progress + 1
-
-    return repos_readme
-
 
 if __name__ == "__main__":
 
-    #libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
-    #train_domains_keywords = load_dataset(number_of_methods=50000, num_of_keywords_after_dot=0)
-
-    number_of_methods = 100000
-    methods = load(limit=number_of_methods)
-    train_domains=[]
-    counter=0
-    for method in methods:
-        if counter <= 0.8 * number_of_methods:
-            if method.repo not in train_domains:
-                train_domains.append( method.repo)
-            counter = counter +1
-
-    print(len(train_domains))
-
-
-
-    '''
-    number_of_methods = 50000
-    methods = load(limit=number_of_methods)
-    methods_checked = []
-    tag_list = []
-    progress = 0
-    for method in methods:
-        if method.repo not in methods_checked:
-            methods_checked.append(method.repo)
-            print(method.repo)
-            r = requests.get('https://github.com/' + method.repo[7:])
-            root = html.fromstring(r.content)
-            root.make_links_absolute('https://github.com/' + method.repo[7:])
-            tagcloud = root.xpath('//a[contains(@title, "Topic:")]/text()')
-            tagcloud = [tag.strip() for tag in tagcloud]
-            print(tagcloud)
-            tag_list = tag_list + tagcloud
-        #print("Progress ", progress/number_of_methods*100)
-        progress = progress + 1
-    print(Counter(tag_list))
-    '''
-    # get_readme(number_of_methods=3000)
+    libraries, keywords, lib_key_graph, test_domains_libraries, test_domains_keywords, train_domains_libraries, \
+    train_domains_keywords = load_dataset(number_of_methods=100000, num_of_keywords_after_dot=0)

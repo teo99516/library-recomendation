@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import argparse
 from line_algo.model import LINEModel
 from line_algo.utils import DBLPDataLoader
 import pickle
@@ -41,11 +40,12 @@ def train(args):
             if b % 1000 == 0 or b == (args.num_batches - 1):
                 embedding = sess.run(model.embedding)
                 normalized_embedding = embedding / np.linalg.norm(embedding, axis=1, keepdims=True)
-                pickle.dump(data_loader.embedding_mapping(normalized_embedding),
-                            open('line_algo/data/embedding_keras_%s.gpickle' % suffix, 'wb'))
+                if 'keras' in args.graph_file:
+                    pickle.dump(data_loader.embedding_mapping(normalized_embedding),
+                                open('line_algo/data/embedding_keras_%s.gpickle' % suffix, 'wb'))
+                else:
+                    pickle.dump(data_loader.embedding_mapping(normalized_embedding),
+                                open('line_algo/data/embedding_%s.gpickle' % suffix, 'wb'))
 
     return data_loader.embedding_mapping(normalized_embedding)
 
-
-if __name__ == '__main__':
-    emb = main(args)

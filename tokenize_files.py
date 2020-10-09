@@ -1,9 +1,7 @@
-import os
 import re
 import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 import spacy
-from spacy.tokens import Doc
 from spacy.lang.en import English
 from nltk.stem import PorterStemmer
 from math import log
@@ -234,29 +232,3 @@ def parse_lines_with_libraries(code_line, lib_dict):
             libraries_full_names.append(library_original_name)
 
     return libraries_full_names, lib_dict
-
-
-# THIS EXISTS JUST FOR TESTING
-# SHOULD BE DELETED
-if __name__ == "__main__":
-
-    path = os.getcwd() + '\keras\\tests'
-    # Returns all the paths of the files in a directory
-    # Starts from the files in the directory and then from the directories top bottom
-    file_paths = []
-    for r, d, f in os.walk(path):
-        for file in f:
-            if '.py' in file:
-                file_paths.append(os.path.join(r, file))
-
-    libraries, keywords = get_libs_and_keywords(file_paths[6])
-
-    print("Number of unique libraries: ", len(libraries))
-    #print("Libraries listed alphabetically:")
-    #libraries.sort()
-    #print(libraries)
-
-    print("Number of unique keywords: ", len(keywords))
-    #print("Keywords listed alphabetically:")
-    #keywords.sort()
-    #print(keywords)
